@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 
@@ -12,7 +12,7 @@ import '../models/profile.dart';
 // ---------------------------------------------------------------------------
 
 final geminiServiceProvider = Provider<GeminiService>((ref) {
-  final apiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
+  final apiKey = const String.fromEnvironment('GEMINI_API_KEY');
   return GeminiService(apiKey);
 });
 

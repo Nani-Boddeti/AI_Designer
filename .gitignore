@@ -50,3 +50,4 @@ app.*.map.json
 .knownPackages
 pubspec.lock
 build/
+build_apk.sh

@@ -39,8 +39,6 @@ dependencies:
   # Local storage
   hive_flutter: ^1.1.0
 
-  # Environment
-  flutter_dotenv: ^5.2.1
 
   # Deep links
   url_launcher: ^6.3.1
@@ -67,5 +65,3 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  assets:
-    - .env

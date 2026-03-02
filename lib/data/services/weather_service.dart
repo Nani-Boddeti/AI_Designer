@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:http/http.dart' as http;
@@ -10,7 +10,7 @@ import 'package:http/http.dart' as http;
 // ---------------------------------------------------------------------------
 
 final weatherServiceProvider = Provider<WeatherService>((ref) {
-  final apiKey = dotenv.env['OPENWEATHER_API_KEY'] ?? '';
+  final apiKey = const String.fromEnvironment('OPENWEATHER_API_KEY');
   return WeatherService(apiKey);
 });
 
