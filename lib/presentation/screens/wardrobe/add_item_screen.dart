@@ -1,0 +1,370 @@
+import 'dart:typed_data';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
+
+import '../../../data/models/wardrobe_item.dart';
+import '../../providers/wardrobe_provider.dart';
+
+class AddItemScreen extends ConsumerStatefulWidget {
+  const AddItemScreen({super.key, required this.profileId});
+
+  final String profileId;
+
+  @override
+  ConsumerState<AddItemScreen> createState() => _AddItemScreenState();
+}
+
+class _AddItemScreenState extends ConsumerState<AddItemScreen> {
+  Uint8List? _imageBytes;
+  bool _isProcessing = false;
+  String _step = '';
+  String? _errorMessage;
+  WardrobeItem? _result;
+
+  Future<void> _pickImage(ImageSource source) async {
+    final picker = ImagePicker();
+    final picked =
+        await picker.pickImage(source: source, imageQuality: 90);
+    if (picked == null) return;
+    final bytes = await picked.readAsBytes();
+    setState(() {
+      _imageBytes = bytes;
+      _result = null;
+      _errorMessage = null;
+    });
+  }
+
+  Future<void> _processAndSave() async {
+    if (_imageBytes == null) return;
+    setState(() {
+      _isProcessing = true;
+      _step = 'Starting…';
+      _errorMessage = null;
+    });
+
+    try {
+      // The notifier's addItem handles the pipeline and calls onStep.
+      final notifier = ref.read(wardrobeProvider(widget.profileId).notifier);
+
+      // We can't pass onStep into the notifier directly from here in a clean way,
+      // so we poll _currentStep or we wire it differently.
+      // For simplicity, we trigger the pipeline and update step from the notifier.
+      _startStepPolling();
+
+      final item = await notifier.addItem(_imageBytes!);
+
+      setState(() {
+        _result = item;
+        _isProcessing = false;
+        _step = 'Done!';
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = e.toString();
+        _isProcessing = false;
+      });
+    }
+  }
+
+  void _startStepPolling() {
+    // Poll the notifier's currentStep every 300ms.
+    Future.doWhile(() async {
+      if (!mounted) return false;
+      final notifier = ref.read(wardrobeProvider(widget.profileId).notifier);
+      setState(() => _step = notifier.currentStep);
+      if (!_isProcessing) return false;
+      await Future.delayed(const Duration(milliseconds: 300));
+      return true;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Add Clothing Item')),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Image preview / picker
+            GestureDetector(
+              onTap: _isProcessing ? null : () => _showSourceSheet(),
+              child: Container(
+                height: 280,
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: colorScheme.outline.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: _imageBytes != null
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(15),
+                        child: Image.memory(
+                          _imageBytes!,
+                          fit: BoxFit.contain,
+                        ),
+                      )
+                    : Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.add_photo_alternate_outlined,
+                              size: 56, color: colorScheme.primary),
+                          const SizedBox(height: 12),
+                          const Text('Tap to add a photo'),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Camera or Gallery',
+                            style: TextStyle(
+                                color: colorScheme.onSurface
+                                    .withValues(alpha: 0.5)),
+                          ),
+                        ],
+                      ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Action buttons
+            if (!_isProcessing && _result == null) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _pickImage(ImageSource.camera),
+                      icon: const Icon(Icons.camera_alt_outlined),
+                      label: const Text('Camera'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _pickImage(ImageSource.gallery),
+                      icon: const Icon(Icons.photo_library_outlined),
+                      label: const Text('Gallery'),
+                    ),
+                  ),
+                ],
+              ),
+              if (_imageBytes != null) ...[
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: _processAndSave,
+                  icon: const Icon(Icons.auto_awesome),
+                  label: const Text('AI Process & Save'),
+                ),
+              ],
+            ],
+
+            // Progress steps
+            if (_isProcessing) ...[
+              const SizedBox(height: 24),
+              const LinearProgressIndicator(),
+              const SizedBox(height: 12),
+              _StepIndicator(step: _step),
+              const SizedBox(height: 8),
+              const _StepList(),
+            ],
+
+            // Error
+            if (_errorMessage != null) ...[
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: colorScheme.errorContainer,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  _errorMessage!,
+                  style: TextStyle(color: colorScheme.onErrorContainer),
+                ),
+              ),
+              const SizedBox(height: 12),
+              FilledButton(
+                onPressed: _processAndSave,
+                child: const Text('Retry'),
+              ),
+            ],
+
+            // Result
+            if (_result != null) ...[
+              const SizedBox(height: 16),
+              _ResultCard(item: _result!),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.check_circle_outline),
+                label: const Text('Done'),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _imageBytes = null;
+                    _result = null;
+                    _step = '';
+                  });
+                },
+                icon: const Icon(Icons.add_photo_alternate_outlined),
+                label: const Text('Add Another'),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showSourceSheet() {
+    showModalBottomSheet(
+      context: context,
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined),
+              title: const Text('Take a Photo'),
+              onTap: () {
+                Navigator.of(context).pop();
+                _pickImage(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Choose from Gallery'),
+              onTap: () {
+                Navigator.of(context).pop();
+                _pickImage(ImageSource.gallery);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Supporting widgets
+// ---------------------------------------------------------------------------
+
+class _StepIndicator extends StatelessWidget {
+  const _StepIndicator({required this.step});
+
+  final String step;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      step,
+      textAlign: TextAlign.center,
+      style: Theme.of(context).textTheme.bodyMedium,
+    );
+  }
+}
+
+class _StepList extends StatelessWidget {
+  const _StepList();
+
+  static const steps = [
+    'Compressing image',
+    'Removing background',
+    'AI tagging',
+    'Uploading images',
+    'Saving to wardrobe',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: steps.map((s) => _StepRow(label: s)).toList(),
+    );
+  }
+}
+
+class _StepRow extends StatelessWidget {
+  const _StepRow({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          const Icon(Icons.circle, size: 6, color: Colors.grey),
+          const SizedBox(width: 8),
+          Text(label, style: const TextStyle(color: Colors.grey)),
+        ],
+      ),
+    );
+  }
+}
+
+class _ResultCard extends StatelessWidget {
+  const _ResultCard({required this.item});
+
+  final WardrobeItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: colorScheme.primaryContainer,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.check_circle, color: colorScheme.primary),
+              const SizedBox(width: 8),
+              Text(
+                'Item Added!',
+                style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.onPrimaryContainer),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(item.name,
+              style: const TextStyle(
+                  fontWeight: FontWeight.w600, fontSize: 16)),
+          const SizedBox(height: 4),
+          Text('Category: ${item.category.displayName}'),
+          if (item.aiDescription != null) ...[
+            const SizedBox(height: 8),
+            Text(item.aiDescription!,
+                style: const TextStyle(color: Colors.grey)),
+          ],
+          if (item.colorNames.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              children: item.colorNames
+                  .map((c) => Chip(
+                        label: Text(c),
+                        visualDensity: VisualDensity.compact,
+                      ))
+                  .toList(),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
