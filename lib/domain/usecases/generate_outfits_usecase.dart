@@ -232,7 +232,9 @@ class GenerateOutfitsUseCase {
       result.addAll(entry.value.take(slots[entry.key]!));
     }
 
-    return result;
+    // Safety: if min-per-category × numCategories exceeded cap (edge case when
+    // numCategories is large relative to cap), truncate to the cap.
+    return result.length <= cap ? result : result.sublist(0, cap);
   }
 
   /// Returns a slim map with only the fields Gemini needs for coordination.

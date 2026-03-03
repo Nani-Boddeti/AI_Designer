@@ -1,5 +1,8 @@
 import '../../core/constants/app_constants.dart';
 
+// Sentinel so copyWith can distinguish "clear skinTone" from "leave unchanged".
+const _kSkinToneSentinel = Object();
+
 /// Represents a family member profile within a household.
 class Profile {
   const Profile({
@@ -62,7 +65,7 @@ class Profile {
       'name': name,
       if (avatarUrl != null) 'avatar_url': avatarUrl,
       'age_group': ageGroup.value,
-      if (skinTone != null) 'skin_tone': skinTone!.value,
+      'skin_tone': skinTone?.value,
       'style_persona': stylePersona,
       'fit_preferences': fitPreferences,
       'created_at': createdAt.toIso8601String(),
@@ -76,7 +79,9 @@ class Profile {
     String? name,
     String? avatarUrl,
     AgeGroup? ageGroup,
-    SkinTone? skinTone,
+    // Use sentinel so callers can pass null to clear skinTone.
+    // Omitting the parameter keeps the existing value.
+    Object? skinTone = _kSkinToneSentinel,
     List<String>? stylePersona,
     Map<String, dynamic>? fitPreferences,
     DateTime? createdAt,
@@ -88,7 +93,9 @@ class Profile {
       name: name ?? this.name,
       avatarUrl: avatarUrl ?? this.avatarUrl,
       ageGroup: ageGroup ?? this.ageGroup,
-      skinTone: skinTone ?? this.skinTone,
+      skinTone: identical(skinTone, _kSkinToneSentinel)
+          ? this.skinTone
+          : skinTone as SkinTone?,
       stylePersona: stylePersona ?? this.stylePersona,
       fitPreferences: fitPreferences ?? this.fitPreferences,
       createdAt: createdAt ?? this.createdAt,

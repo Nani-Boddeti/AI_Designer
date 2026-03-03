@@ -255,7 +255,16 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
           _selectedSeasons.isNotEmpty ? _selectedSeasons : ['Untagged'];
       final notifier =
           ref.read(wardrobeProvider(widget.profileId).notifier);
-      await notifier.updateItem(_result!.copyWith(seasonTags: seasons));
+      try {
+        await notifier.updateItem(_result!.copyWith(seasonTags: seasons));
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to save season tag: $e')),
+          );
+        }
+        return;
+      }
     }
     if (mounted) Navigator.of(context).pop();
   }

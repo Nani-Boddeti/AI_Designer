@@ -137,10 +137,11 @@ enum SkinTone {
 
   static SkinTone? fromString(String? value) {
     if (value == null) return null;
-    return SkinTone.values.firstWhere(
-      (e) => e.name == value,
-      orElse: () => SkinTone.medium,
-    );
+    try {
+      return SkinTone.values.firstWhere((e) => e.name == value);
+    } catch (_) {
+      return null;
+    }
   }
 }
 
