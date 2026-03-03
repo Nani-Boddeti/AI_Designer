@@ -33,6 +33,7 @@ class ProfilesNotifier extends AsyncNotifier<List<Profile>> {
   Future<void> addProfile({
     required String name,
     required AgeGroup ageGroup,
+    SkinTone? skinTone,
     List<String> stylePersona = const [],
     Map<String, dynamic> fitPreferences = const {},
   }) async {
@@ -45,6 +46,7 @@ class ProfilesNotifier extends AsyncNotifier<List<Profile>> {
       'household_id': householdId,
       'name': name,
       'age_group': ageGroup.value,
+      if (skinTone != null) 'skin_tone': skinTone.value,
       'style_persona': stylePersona,
       'fit_preferences': fitPreferences,
     }).select().single();

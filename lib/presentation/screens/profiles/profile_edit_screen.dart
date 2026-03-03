@@ -21,6 +21,7 @@ class ProfileEditScreen extends ConsumerStatefulWidget {
 class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
   final _nameCtrl = TextEditingController();
   AgeGroup _ageGroup = AgeGroup.adult;
+  SkinTone? _skinTone;
   List<String> _stylePersona = [];
   List<String> _fitConstraints = [];
   bool _loading = false;
@@ -41,6 +42,7 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
         _profile = profile;
         _nameCtrl.text = profile.name;
         _ageGroup = profile.ageGroup;
+        _skinTone = profile.skinTone;
         _stylePersona = List.from(profile.stylePersona);
         _fitConstraints = List.from(
           (profile.fitPreferences['constraints'] as List?)
@@ -87,6 +89,7 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
       final updated = _profile!.copyWith(
         name: _nameCtrl.text.trim(),
         ageGroup: _ageGroup,
+        skinTone: _skinTone,
         stylePersona: _stylePersona,
         fitPreferences: {'constraints': _fitConstraints},
       );
@@ -243,6 +246,59 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
                   .toList(),
               onChanged: (v) =>
                   setState(() => _ageGroup = v ?? _ageGroup),
+            ),
+            const SizedBox(height: 24),
+
+            // Skin tone
+            Text('Skin Tone',
+                style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 4),
+            Text(
+              'Helps Gemini suggest complementary colours.',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: SkinTone.values.map((tone) {
+                final selected = _skinTone == tone;
+                return GestureDetector(
+                  onTap: () => setState(
+                      () => _skinTone = selected ? null : tone),
+                  child: Column(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: Color(tone.swatchColor),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: selected
+                                ? Theme.of(context).colorScheme.primary
+                                : Colors.grey.shade300,
+                            width: selected ? 3 : 1,
+                          ),
+                        ),
+                        child: selected
+                            ? Icon(Icons.check,
+                                size: 18,
+                                color: tone == SkinTone.fair ||
+                                        tone == SkinTone.light
+                                    ? Colors.black54
+                                    : Colors.white)
+                            : null,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(tone.displayName,
+                          style: const TextStyle(fontSize: 10)),
+                    ],
+                  ),
+                );
+              }).toList(),
             ),
             const SizedBox(height: 24),
 

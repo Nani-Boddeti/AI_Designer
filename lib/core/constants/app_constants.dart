@@ -99,6 +99,52 @@ enum AgeGroup {
 }
 
 // ---------------------------------------------------------------------------
+// Skin tone options (Fitzpatrick-based, inclusive labels)
+// ---------------------------------------------------------------------------
+
+enum SkinTone {
+  fair,
+  light,
+  medium,
+  olive,
+  brown,
+  dark;
+
+  String get displayName {
+    switch (this) {
+      case SkinTone.fair:   return 'Fair';
+      case SkinTone.light:  return 'Light';
+      case SkinTone.medium: return 'Medium';
+      case SkinTone.olive:  return 'Olive';
+      case SkinTone.brown:  return 'Brown';
+      case SkinTone.dark:   return 'Dark';
+    }
+  }
+
+  /// Representative swatch colour for the UI picker.
+  int get swatchColor {
+    switch (this) {
+      case SkinTone.fair:   return 0xFFFFDBAC;
+      case SkinTone.light:  return 0xFFF1C27D;
+      case SkinTone.medium: return 0xFFE0AC69;
+      case SkinTone.olive:  return 0xFFC68642;
+      case SkinTone.brown:  return 0xFF8D5524;
+      case SkinTone.dark:   return 0xFF4A2912;
+    }
+  }
+
+  String get value => name;
+
+  static SkinTone? fromString(String? value) {
+    if (value == null) return null;
+    return SkinTone.values.firstWhere(
+      (e) => e.name == value,
+      orElse: () => SkinTone.medium,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Style persona options
 // ---------------------------------------------------------------------------
 class StylePersonas {

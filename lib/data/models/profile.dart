@@ -9,6 +9,7 @@ class Profile {
     required this.name,
     this.avatarUrl,
     required this.ageGroup,
+    this.skinTone,
     this.stylePersona = const [],
     this.fitPreferences = const {},
     required this.createdAt,
@@ -23,6 +24,7 @@ class Profile {
   final String name;
   final String? avatarUrl;
   final AgeGroup ageGroup;
+  final SkinTone? skinTone;
 
   /// List of chosen style persona labels.
   final List<String> stylePersona;
@@ -40,6 +42,7 @@ class Profile {
       name: json['name'] as String,
       avatarUrl: json['avatar_url'] as String?,
       ageGroup: AgeGroup.fromString(json['age_group'] as String? ?? 'adult'),
+      skinTone: SkinTone.fromString(json['skin_tone'] as String?),
       stylePersona: json['style_persona'] is List
           ? (json['style_persona'] as List<dynamic>)
               .map((e) => e.toString())
@@ -59,6 +62,7 @@ class Profile {
       'name': name,
       if (avatarUrl != null) 'avatar_url': avatarUrl,
       'age_group': ageGroup.value,
+      if (skinTone != null) 'skin_tone': skinTone!.value,
       'style_persona': stylePersona,
       'fit_preferences': fitPreferences,
       'created_at': createdAt.toIso8601String(),
@@ -72,6 +76,7 @@ class Profile {
     String? name,
     String? avatarUrl,
     AgeGroup? ageGroup,
+    SkinTone? skinTone,
     List<String>? stylePersona,
     Map<String, dynamic>? fitPreferences,
     DateTime? createdAt,
@@ -83,6 +88,7 @@ class Profile {
       name: name ?? this.name,
       avatarUrl: avatarUrl ?? this.avatarUrl,
       ageGroup: ageGroup ?? this.ageGroup,
+      skinTone: skinTone ?? this.skinTone,
       stylePersona: stylePersona ?? this.stylePersona,
       fitPreferences: fitPreferences ?? this.fitPreferences,
       createdAt: createdAt ?? this.createdAt,

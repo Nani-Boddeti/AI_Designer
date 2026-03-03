@@ -18,6 +18,9 @@ CREATE TABLE IF NOT EXISTS households (
 -- Migration: add hemisphere to existing households tables
 -- ALTER TABLE households ADD COLUMN IF NOT EXISTS hemisphere TEXT CHECK (hemisphere IN ('north', 'south')) DEFAULT 'north';
 
+-- Migration: add skin_tone to existing profiles table
+-- ALTER TABLE profiles ADD COLUMN IF NOT EXISTS skin_tone TEXT CHECK (skin_tone IN ('fair','light','medium','olive','brown','dark'));
+
 CREATE TABLE IF NOT EXISTS profiles (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   household_id    UUID REFERENCES households(id) ON DELETE CASCADE,
@@ -25,6 +28,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   name            TEXT NOT NULL,
   avatar_url      TEXT,
   age_group       TEXT CHECK (age_group IN ('toddler','child','teen','adult')),
+  skin_tone       TEXT CHECK (skin_tone IN ('fair','light','medium','olive','brown','dark')),
   style_persona   JSONB DEFAULT '[]',
   fit_preferences JSONB DEFAULT '{}',
   created_at      TIMESTAMPTZ DEFAULT now()

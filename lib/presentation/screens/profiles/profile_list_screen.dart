@@ -145,6 +145,7 @@ class _AddProfileDialog extends ConsumerStatefulWidget {
 class _AddProfileDialogState extends ConsumerState<_AddProfileDialog> {
   final _nameCtrl = TextEditingController();
   AgeGroup _ageGroup = AgeGroup.adult;
+  SkinTone? _skinTone;
   bool _loading = false;
 
   @override
@@ -177,6 +178,34 @@ class _AddProfileDialogState extends ConsumerState<_AddProfileDialog> {
                 .toList(),
             onChanged: (v) => setState(() => _ageGroup = v ?? _ageGroup),
           ),
+          const SizedBox(height: 16),
+          DropdownButtonFormField<SkinTone?>(
+            // ignore: deprecated_member_use
+            value: _skinTone,
+            decoration: const InputDecoration(labelText: 'Skin Tone (optional)'),
+            items: [
+              const DropdownMenuItem(value: null, child: Text('Not specified')),
+              ...SkinTone.values.map((t) => DropdownMenuItem(
+                    value: t,
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 16,
+                          height: 16,
+                          decoration: BoxDecoration(
+                            color: Color(t.swatchColor),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.grey.shade300),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(t.displayName),
+                      ],
+                    ),
+                  )),
+            ],
+            onChanged: (v) => setState(() => _skinTone = v),
+          ),
         ],
       ),
       actions: [
@@ -204,6 +233,7 @@ class _AddProfileDialogState extends ConsumerState<_AddProfileDialog> {
       await ref.read(profilesProvider.notifier).addProfile(
             name: _nameCtrl.text.trim(),
             ageGroup: _ageGroup,
+            skinTone: _skinTone,
           );
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
