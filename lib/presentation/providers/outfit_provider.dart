@@ -5,6 +5,7 @@ import '../../data/models/profile.dart';
 import '../../data/repositories/outfit_repository.dart';
 import '../../domain/usecases/generate_outfits_usecase.dart';
 import '../providers/auth_provider.dart';
+import '../providers/usage_provider.dart';
 
 // ---------------------------------------------------------------------------
 // Generated outfits holder (in-memory for current session)
@@ -33,6 +34,10 @@ class GeneratedOutfitsNotifier extends Notifier<List<GeneratedOutfit>> {
       longitude: longitude,
     );
     state = results;
+    // Increment usage counter — fire-and-forget, never fatal.
+    try {
+      await ref.read(usageNotifierProvider.notifier).increment();
+    } catch (_) {}
   }
 
   void clear() => state = [];

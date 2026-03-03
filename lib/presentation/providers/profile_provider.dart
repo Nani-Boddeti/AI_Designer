@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../data/models/profile.dart';
@@ -33,6 +34,7 @@ class ProfilesNotifier extends AsyncNotifier<List<Profile>> {
   Future<void> addProfile({
     required String name,
     required AgeGroup ageGroup,
+    Gender gender = Gender.other,
     SkinTone? skinTone,
     List<String> stylePersona = const [],
     Map<String, dynamic> fitPreferences = const {},
@@ -42,14 +44,27 @@ class ProfilesNotifier extends AsyncNotifier<List<Profile>> {
     if (householdId == null) return;
 
     final svc = ref.read(supabaseServiceProvider);
-    final data = await svc.client.from(SupabaseTables.profiles).insert({
+    // Generate ID client-side so we can fetch the row separately without
+    // chaining .select() — INSERT+RETURNING triggers the SELECT RLS policy
+    // which may fail in edge cases where current_household_id() is evaluated
+    // before the profile row is visible. See MEMORY.md RLS patterns.
+    final id = const Uuid().v4();
+    await svc.client.from(SupabaseTables.profiles).insert({
+      'id': id,
       'household_id': householdId,
       'name': name,
       'age_group': ageGroup.value,
+      'gender': gender.value,
       if (skinTone != null) 'skin_tone': skinTone.value,
       'style_persona': stylePersona,
       'fit_preferences': fitPreferences,
-    }).select().single();
+    });
+
+    final data = await svc.client
+        .from(SupabaseTables.profiles)
+        .select()
+        .eq('id', id)
+        .single();
 
     final newProfile = Profile.fromJson(data);
     state = AsyncData<List<Profile>>([...(state.value ?? <Profile>[]), newProfile]);
@@ -105,9 +120,12 @@ class ProfilesNotifier extends AsyncNotifier<List<Profile>> {
   }
 
   Future<void> deleteProfile(String profileId) async {
-    final profile = state.value?.firstWhere((p) => p.id == profileId,
-        orElse: () => throw Exception('Profile not found'));
-    if (profile == null) return;
+    final current = state.value;
+    if (current == null) throw StateError('profiles state is null');
+    final profile = current.firstWhere(
+      (p) => p.id == profileId,
+      orElse: () => throw Exception('Profile not found'),
+    );
 
     // Refuse to delete account-linked profiles — doing so would break
     // current_household_id() for all subsequent Supabase queries from

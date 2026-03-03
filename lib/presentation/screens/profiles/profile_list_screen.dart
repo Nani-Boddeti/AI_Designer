@@ -145,6 +145,7 @@ class _AddProfileDialog extends ConsumerStatefulWidget {
 class _AddProfileDialogState extends ConsumerState<_AddProfileDialog> {
   final _nameCtrl = TextEditingController();
   AgeGroup _ageGroup = AgeGroup.adult;
+  Gender _gender = Gender.other;
   SkinTone? _skinTone;
   bool _loading = false;
 
@@ -177,6 +178,24 @@ class _AddProfileDialogState extends ConsumerState<_AddProfileDialog> {
                     ))
                 .toList(),
             onChanged: (v) => setState(() => _ageGroup = v ?? _ageGroup),
+          ),
+          const SizedBox(height: 16),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text('Gender',
+                style: Theme.of(context).textTheme.labelMedium),
+          ),
+          const SizedBox(height: 8),
+          SegmentedButton<Gender>(
+            segments: Gender.values
+                .map((g) => ButtonSegment(
+                      value: g,
+                      label: Text(g.displayName, style: const TextStyle(fontSize: 11)),
+                    ))
+                .toList(),
+            selected: {_gender},
+            onSelectionChanged: (val) =>
+                setState(() => _gender = val.first),
           ),
           const SizedBox(height: 16),
           DropdownButtonFormField<SkinTone?>(
@@ -233,6 +252,7 @@ class _AddProfileDialogState extends ConsumerState<_AddProfileDialog> {
       await ref.read(profilesProvider.notifier).addProfile(
             name: _nameCtrl.text.trim(),
             ageGroup: _ageGroup,
+            gender: _gender,
             skinTone: _skinTone,
           );
       if (mounted) Navigator.of(context).pop();

@@ -107,6 +107,7 @@ Rules:
         'profile_id': p.id,
         'profile_name': p.name,
         'age_group': p.ageGroup.displayName,
+        'gender': p.gender.displayName,
         if (p.skinTone != null) 'skin_tone': p.skinTone!.displayName,
         'style_personas': p.stylePersona,
         'fit_preferences': p.fitPreferences,
@@ -132,6 +133,7 @@ Requirements:
 - Each outfit must only use items from that member's own wardrobe (reference by "id").
 - Outfits should be visually coordinated across the whole family (complementary or analogous colors).
 - Respect age group, style personas, and fit preferences.
+- Respect gender: suggest styles appropriate and flattering for that gender.
 - If skin_tone is provided, prefer colours that complement that skin tone.
 - If weather data is given, choose weather-appropriate items.
 - Write a short, friendly styling note for each person.

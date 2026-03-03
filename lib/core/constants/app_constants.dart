@@ -12,6 +12,7 @@ class SupabaseTables {
   static const String wardrobeItems = 'wardrobe_items';
   static const String outfits = 'outfits';
   static const String calendarEvents = 'calendar_events';
+  static const String householdUsage = 'household_usage';
 }
 
 // ---------------------------------------------------------------------------
@@ -232,6 +233,51 @@ class SeasonOptions {
     'Winter',
     'All-Season',
   ];
+}
+
+// ---------------------------------------------------------------------------
+// Gender enum
+// ---------------------------------------------------------------------------
+
+enum Gender {
+  male,
+  female,
+  other;
+
+  String get displayName {
+    switch (this) {
+      case Gender.male:   return 'Male';
+      case Gender.female: return 'Female';
+      case Gender.other:  return 'Prefer not to say';
+    }
+  }
+
+  String get value => name;
+
+  static Gender fromString(String? value) {
+    if (value == null) return Gender.other;
+    try {
+      return Gender.values.firstWhere((e) => e.name == value);
+    } catch (_) {
+      return Gender.other;
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Usage tier limits
+// ---------------------------------------------------------------------------
+class TierLimits {
+  TierLimits._();
+
+  static const int freeHouseholdLimit      = 15;
+  static const int proPerMale              = 10;  // also 'other'
+  static const int proPerFemale            = 15;
+  static const int primePerMale            = 50;
+  static const int primePerFemale          = 55;
+  static const int pricePerSuggestionPaisa = 500;   // ₹5 per suggestion
+  static const int proMinPaisa             = 25000;  // ₹250 floor
+  static const int primeMinPaisa           = 100000; // ₹1000 floor
 }
 
 // ---------------------------------------------------------------------------

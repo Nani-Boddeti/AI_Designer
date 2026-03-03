@@ -34,6 +34,12 @@
                     android:host="login-callback"/>
             </intent-filter>
         </activity>
+        <!-- Razorpay payment checkout -->
+        <activity
+            android:name="com.razorpay.CheckoutActivity"
+            android:configChanges="keyboard|keyboardHidden|phoneState|orientation|screenSize"
+            android:exported="false"
+            android:theme="@style/Checkout.Theme"/>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

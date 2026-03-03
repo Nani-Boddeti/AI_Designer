@@ -1,14 +1,17 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../../../core/config/dev_config.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../data/models/profile.dart';
 import '../../../data/services/weather_service.dart';
 import '../../../router/app_router.dart';
 import '../../providers/outfit_provider.dart';
 import '../../providers/profile_provider.dart';
+import '../../providers/usage_provider.dart';
 
 class StyleSessionScreen extends ConsumerStatefulWidget {
   const StyleSessionScreen({super.key, this.embeddedInHome = false});
@@ -79,6 +82,43 @@ class _StyleSessionScreenState extends ConsumerState<StyleSessionScreen> {
     }
   }
 
+  void _showLimitDialog(UsageState usage) {
+    final now = DateTime.now();
+    final nextReset = DateTime(now.year, now.month + 1, 1);
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    final monthName = months[now.month - 1];
+    final resetStr =
+        '${nextReset.day} ${months[nextReset.month - 1]} ${nextReset.year}';
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Monthly Limit Reached'),
+        content: Text(
+          "You've used all ${usage.limit} outfit suggestions for $monthName. "
+          'Resets on $resetStr. '
+          'Upgrade to Pro or Prime for more suggestions.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Not Now'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              context.push(AppRoutes.subscription);
+            },
+            child: const Text('View Plans'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _generateOutfits(List<Profile> allProfiles) async {
     if (_selectedProfileIds.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -91,6 +131,21 @@ class _StyleSessionScreenState extends ConsumerState<StyleSessionScreen> {
         const SnackBar(content: Text('Enter an occasion')),
       );
       return;
+    }
+
+    // Check usage limit; bypass in debug builds when dev switch is on.
+    final bypass = kDebugMode && ref.read(devBypassLimitsProvider);
+    if (!bypass) {
+      UsageState usage;
+      try {
+        usage = await ref.read(usageNotifierProvider.future);
+      } catch (_) {
+        usage = const UsageState();
+      }
+      if (!usage.canGenerate) {
+        _showLimitDialog(usage);
+        return;
+      }
     }
 
     setState(() => _generating = true);

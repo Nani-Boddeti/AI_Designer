@@ -1,11 +1,14 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/config/dev_config.dart';
 import '../../../router/app_router.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/profile_provider.dart';
+import '../../providers/usage_provider.dart';
 import '../wardrobe/wardrobe_screen.dart';
 import '../outfit/style_session_screen.dart';
 import '../calendar/style_calendar_screen.dart';
@@ -149,6 +152,8 @@ class _MoreTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authProvider).value;
+    final usageAsync = ref.watch(usageNotifierProvider);
+    final bypass = ref.watch(devBypassLimitsProvider);
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -156,6 +161,34 @@ class _MoreTab extends ConsumerWidget {
       body: ListView(
         children: [
           const SizedBox(height: 8),
+
+          // Subscription / usage card
+          usageAsync.when(
+            loading: () => const SizedBox.shrink(),
+            error: (_, _) => const SizedBox.shrink(),
+            data: (usage) {
+              final h = authState?.household;
+              final label = h?.isPrimeActive == true
+                  ? 'Prime Plan'
+                  : h?.isProActive == true
+                      ? 'Pro Plan'
+                      : 'Free Plan';
+              final isSubscribed = h?.isSubscribed ?? false;
+              return ListTile(
+                leading: Icon(
+                  Icons.workspace_premium_outlined,
+                  color: isSubscribed ? colorScheme.primary : null,
+                ),
+                title: Text(label),
+                subtitle:
+                    Text('${usage.count} / ${usage.limit} used this month'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push(AppRoutes.subscription),
+              );
+            },
+          ),
+          const Divider(),
+
           _MoreTile(
             icon: Icons.people_outline,
             title: 'Family Members',
@@ -195,6 +228,20 @@ class _MoreTab extends ConsumerWidget {
                 },
               ),
             ),
+
+          // Dev settings — only visible in debug builds
+          if (kDebugMode) ...[
+            const Divider(),
+            SwitchListTile(
+              secondary: const Icon(Icons.bug_report_outlined),
+              title: const Text('Dev: Bypass usage limits'),
+              subtitle: const Text('Debug builds only'),
+              value: bypass,
+              onChanged: (v) =>
+                  ref.read(devBypassLimitsProvider.notifier).state = v,
+            ),
+          ],
+
           const Divider(),
           _MoreTile(
             icon: Icons.logout,

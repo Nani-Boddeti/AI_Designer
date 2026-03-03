@@ -14,6 +14,7 @@ import '../presentation/screens/profiles/profile_edit_screen.dart';
 import '../presentation/screens/profiles/profile_list_screen.dart';
 import '../presentation/screens/shopping/gap_filler_screen.dart';
 import '../presentation/screens/splash/splash_screen.dart';
+import '../presentation/screens/subscription/subscription_screen.dart';
 import '../presentation/screens/wardrobe/add_item_screen.dart';
 import '../presentation/screens/wardrobe/item_detail_screen.dart';
 import '../presentation/screens/wardrobe/wardrobe_screen.dart';
@@ -39,6 +40,7 @@ class AppRoutes {
   static const String virtualLineup = '/virtual-lineup';
   static const String gapFiller = '/gap-filler';
   static const String calendar = '/calendar';
+  static const String subscription = '/subscription';
 
   // Helper to build concrete paths.
   static String wardrobePath(String profileId) => '/wardrobe/$profileId';
@@ -161,6 +163,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.calendar,
         builder: (_, _) => const StyleCalendarScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.subscription,
+        builder: (_, _) => const SubscriptionScreen(),
       ),
     ],
   );

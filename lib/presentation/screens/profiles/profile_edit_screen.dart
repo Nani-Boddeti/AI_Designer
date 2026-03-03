@@ -21,6 +21,7 @@ class ProfileEditScreen extends ConsumerStatefulWidget {
 class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
   final _nameCtrl = TextEditingController();
   AgeGroup _ageGroup = AgeGroup.adult;
+  Gender _gender = Gender.other;
   SkinTone? _skinTone;
   List<String> _stylePersona = [];
   List<String> _fitConstraints = [];
@@ -42,6 +43,7 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
         _profile = profile;
         _nameCtrl.text = profile.name;
         _ageGroup = profile.ageGroup;
+        _gender = profile.gender;
         _skinTone = profile.skinTone;
         _stylePersona = List.from(profile.stylePersona);
         _fitConstraints = List.from(
@@ -89,6 +91,7 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
       final updated = _profile!.copyWith(
         name: _nameCtrl.text.trim(),
         ageGroup: _ageGroup,
+        gender: _gender,
         skinTone: _skinTone,
         stylePersona: _stylePersona,
         fitPreferences: {'constraints': _fitConstraints},
@@ -246,6 +249,24 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
                   .toList(),
               onChanged: (v) =>
                   setState(() => _ageGroup = v ?? _ageGroup),
+            ),
+            const SizedBox(height: 24),
+
+            // Gender
+            Text('Gender',
+                style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 10),
+            SegmentedButton<Gender>(
+              segments: Gender.values
+                  .map((g) => ButtonSegment(
+                        value: g,
+                        label: Text(g.displayName,
+                            style: const TextStyle(fontSize: 11)),
+                      ))
+                  .toList(),
+              selected: {_gender},
+              onSelectionChanged: (val) =>
+                  setState(() => _gender = val.first),
             ),
             const SizedBox(height: 24),
 

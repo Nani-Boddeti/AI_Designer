@@ -158,6 +158,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     required String householdName,
     required String profileName,
     required String hemisphere,
+    required String gender,
   }) async {
     // IMPORTANT: Do NOT use AsyncValue.guard here. If it throws, guard would
     // set AsyncError which makes valueOrNull == null, causing the router to
@@ -171,6 +172,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         householdName: householdName,
         profileName: profileName,
         hemisphere: hemisphere,
+        gender: gender,
       );
       state = AsyncData(AuthState(
         user: repo.currentUser,
@@ -185,6 +187,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
   Future<void> joinHousehold({
     required String inviteCode,
     required String profileName,
+    required String gender,
   }) async {
     // Same pattern as createHousehold — never AsyncError while authenticated.
     final prev = state.value ?? const AuthState();
@@ -194,6 +197,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       final result = await repo.joinHousehold(
         inviteCode: inviteCode,
         profileName: profileName,
+        gender: gender,
       );
       state = AsyncData(AuthState(
         user: repo.currentUser,

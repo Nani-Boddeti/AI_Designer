@@ -80,6 +80,7 @@ class AuthRepository {
     required String householdName,
     required String profileName,
     required String hemisphere,
+    required String gender,
   }) async {
     final user = _service.getCurrentUser();
     if (user == null) throw Exception('Not authenticated');
@@ -112,6 +113,7 @@ class AuthRepository {
           'auth_user_id': user.id,
           'name': profileName,
           'age_group': AgeGroup.adult.value,
+          'gender': gender,
           'style_persona': <String>[],
           'fit_preferences': <String, dynamic>{},
         });
@@ -133,6 +135,7 @@ class AuthRepository {
   Future<({Household household, Profile profile})> joinHousehold({
     required String inviteCode,
     required String profileName,
+    required String gender,
   }) async {
     final user = _service.getCurrentUser();
     if (user == null) throw Exception('Not authenticated');
@@ -150,6 +153,7 @@ class AuthRepository {
           'auth_user_id': user.id,
           'name': profileName,
           'age_group': AgeGroup.adult.value,
+          'gender': gender,
           'style_persona': <String>[],
           'fit_preferences': <String, dynamic>{},
         });

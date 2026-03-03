@@ -8,11 +8,13 @@
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS households (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name        TEXT NOT NULL,
-  hemisphere  TEXT CHECK (hemisphere IN ('north', 'south')) DEFAULT 'north',
-  invite_code TEXT UNIQUE DEFAULT substr(md5(random()::text), 1, 8),
-  created_at  TIMESTAMPTZ DEFAULT now()
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name            TEXT NOT NULL,
+  hemisphere      TEXT CHECK (hemisphere IN ('north', 'south')) DEFAULT 'north',
+  invite_code     TEXT UNIQUE DEFAULT substr(md5(random()::text), 1, 8),
+  tier            TEXT CHECK (tier IN ('free','pro','prime')) DEFAULT 'free',
+  tier_expires_at TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ DEFAULT now()
 );
 
 -- Migration: add hemisphere to existing households tables
@@ -21,6 +23,19 @@ CREATE TABLE IF NOT EXISTS households (
 -- Migration: add skin_tone to existing profiles table
 -- ALTER TABLE profiles ADD COLUMN IF NOT EXISTS skin_tone TEXT CHECK (skin_tone IN ('fair','light','medium','olive','brown','dark'));
 
+-- Migration: add tier fields to existing households table (old 'paid' tier only)
+-- ALTER TABLE households
+--   ADD COLUMN IF NOT EXISTS tier TEXT CHECK (tier IN ('free','paid')) DEFAULT 'free',
+--   ADD COLUMN IF NOT EXISTS tier_expires_at TIMESTAMPTZ;
+
+-- Migration: upgrade tier CHECK to support pro/prime; add gender to profiles
+-- ALTER TABLE profiles
+--   ADD COLUMN IF NOT EXISTS gender TEXT CHECK (gender IN ('male','female','other')) DEFAULT 'other';
+-- UPDATE households SET tier = 'pro' WHERE tier = 'paid';
+-- ALTER TABLE households
+--   DROP CONSTRAINT IF EXISTS households_tier_check,
+--   ADD CONSTRAINT households_tier_check CHECK (tier IN ('free','pro','prime'));
+
 CREATE TABLE IF NOT EXISTS profiles (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   household_id    UUID REFERENCES households(id) ON DELETE CASCADE,
@@ -28,6 +43,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   name            TEXT NOT NULL,
   avatar_url      TEXT,
   age_group       TEXT CHECK (age_group IN ('toddler','child','teen','adult')),
+  gender          TEXT CHECK (gender IN ('male','female','other')) DEFAULT 'other',
   skin_tone       TEXT CHECK (skin_tone IN ('fair','light','medium','olive','brown','dark')),
   style_persona   JSONB DEFAULT '[]',
   fit_preferences JSONB DEFAULT '{}',
@@ -227,3 +243,25 @@ CREATE POLICY "calendar_update" ON calendar_events
 
 CREATE POLICY "calendar_delete" ON calendar_events
   FOR DELETE USING (household_id = current_household_id());
+
+-- ---------------------------------------------------------------------------
+-- Monthly usage tracking (outfit generation counter per household)
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS household_usage (
+  household_id  UUID  REFERENCES households(id) ON DELETE CASCADE,
+  year_month    TEXT  NOT NULL,   -- 'YYYY-MM'
+  outfit_count  INT   NOT NULL DEFAULT 0,
+  PRIMARY KEY (household_id, year_month)
+);
+
+ALTER TABLE household_usage ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "usage_select" ON household_usage
+  FOR SELECT USING (household_id = current_household_id());
+
+CREATE POLICY "usage_insert" ON household_usage
+  FOR INSERT WITH CHECK (household_id = current_household_id());
+
+CREATE POLICY "usage_update" ON household_usage
+  FOR UPDATE USING (household_id = current_household_id());

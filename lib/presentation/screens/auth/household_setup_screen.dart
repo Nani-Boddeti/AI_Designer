@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
 
@@ -21,11 +22,13 @@ class _HouseholdSetupScreenState extends ConsumerState<HouseholdSetupScreen>
   final _createProfileNameCtrl = TextEditingController();
   final _createFormKey = GlobalKey<FormState>();
   String _hemisphere = 'north';
+  Gender _createGender = Gender.other;
 
   // Join household
   final _inviteCodeCtrl = TextEditingController();
   final _joinProfileNameCtrl = TextEditingController();
   final _joinFormKey = GlobalKey<FormState>();
+  Gender _joinGender = Gender.other;
 
   @override
   void initState() {
@@ -49,6 +52,7 @@ class _HouseholdSetupScreenState extends ConsumerState<HouseholdSetupScreen>
           householdName: _householdNameCtrl.text.trim(),
           profileName: _createProfileNameCtrl.text.trim(),
           hemisphere: _hemisphere,
+          gender: _createGender.value,
         );
     _showErrorIfNeeded();
   }
@@ -58,6 +62,7 @@ class _HouseholdSetupScreenState extends ConsumerState<HouseholdSetupScreen>
     await ref.read(authProvider.notifier).joinHousehold(
           inviteCode: _inviteCodeCtrl.text.trim().toUpperCase(),
           profileName: _joinProfileNameCtrl.text.trim(),
+          gender: _joinGender.value,
         );
     _showErrorIfNeeded();
   }
@@ -212,6 +217,22 @@ class _HouseholdSetupScreenState extends ConsumerState<HouseholdSetupScreen>
               onSelectionChanged: (val) =>
                   setState(() => _hemisphere = val.first),
             ),
+            const SizedBox(height: 24),
+            Text('Your gender',
+                style: Theme.of(context).textTheme.labelLarge),
+            const SizedBox(height: 10),
+            SegmentedButton<Gender>(
+              segments: Gender.values
+                  .map((g) => ButtonSegment(
+                        value: g,
+                        label: Text(g.displayName,
+                            style: const TextStyle(fontSize: 11)),
+                      ))
+                  .toList(),
+              selected: {_createGender},
+              onSelectionChanged: (val) =>
+                  setState(() => _createGender = val.first),
+            ),
             const SizedBox(height: 32),
             FilledButton.icon(
               onPressed: isLoading ? null : _createHousehold,
@@ -266,6 +287,22 @@ class _HouseholdSetupScreenState extends ConsumerState<HouseholdSetupScreen>
               ),
               validator: (v) =>
                   (v?.trim().isEmpty ?? true) ? 'Enter your name' : null,
+            ),
+            const SizedBox(height: 24),
+            Text('Your gender',
+                style: Theme.of(context).textTheme.labelLarge),
+            const SizedBox(height: 10),
+            SegmentedButton<Gender>(
+              segments: Gender.values
+                  .map((g) => ButtonSegment(
+                        value: g,
+                        label: Text(g.displayName,
+                            style: const TextStyle(fontSize: 11)),
+                      ))
+                  .toList(),
+              selected: {_joinGender},
+              onSelectionChanged: (val) =>
+                  setState(() => _joinGender = val.first),
             ),
             const SizedBox(height: 32),
             FilledButton.icon(
