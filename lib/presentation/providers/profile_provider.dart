@@ -55,9 +55,13 @@ class ProfilesNotifier extends AsyncNotifier<List<Profile>> {
 
   Future<void> updateProfile(Profile profile) async {
     final svc = ref.read(supabaseServiceProvider);
+    final json = profile.toJson()
+      ..remove('id')
+      ..remove('created_at');
+
     final data = await svc.client
         .from(SupabaseTables.profiles)
-        .update(profile.toJson())
+        .update(json)
         .eq('id', profile.id)
         .select()
         .single();
@@ -82,6 +86,8 @@ class ProfilesNotifier extends AsyncNotifier<List<Profile>> {
       contentType: 'image/jpeg',
     );
 
+    if (avatarUrl.isEmpty) throw Exception('Avatar upload returned empty URL');
+
     final data = await svc.client
         .from(SupabaseTables.profiles)
         .update({'avatar_url': avatarUrl})
@@ -97,6 +103,18 @@ class ProfilesNotifier extends AsyncNotifier<List<Profile>> {
   }
 
   Future<void> deleteProfile(String profileId) async {
+    final profile = state.value?.firstWhere((p) => p.id == profileId,
+        orElse: () => throw Exception('Profile not found'));
+    if (profile == null) return;
+
+    // Refuse to delete account-linked profiles — doing so would break
+    // current_household_id() for all subsequent Supabase queries from
+    // that user, making every RLS-protected table invisible.
+    if (profile.authUserId != null) {
+      throw Exception(
+          'Cannot delete the account owner profile. Remove the household instead.');
+    }
+
     final svc = ref.read(supabaseServiceProvider);
     await svc.client.from(SupabaseTables.profiles).delete().eq('id', profileId);
     final profiles = <Profile>[...(state.value ?? <Profile>[])]

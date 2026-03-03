@@ -41,7 +41,7 @@ class OutfitResultScreen extends ConsumerWidget {
         padding: const EdgeInsets.all(16),
         itemCount: generated.length,
         itemBuilder: (context, i) =>
-            _OutfitCard(generated: generated[i], ref: ref),
+            _OutfitCard(generated: generated[i]),
       ),
       floatingActionButton: Column(
         mainAxisSize: MainAxisSize.min,
@@ -90,10 +90,9 @@ class OutfitResultScreen extends ConsumerWidget {
 // ---------------------------------------------------------------------------
 
 class _OutfitCard extends ConsumerWidget {
-  const _OutfitCard({required this.generated, required this.ref});
+  const _OutfitCard({required this.generated});
 
   final GeneratedOutfit generated;
-  final WidgetRef ref;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

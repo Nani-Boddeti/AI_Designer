@@ -27,7 +27,7 @@ final geminiServiceProvider = Provider<GeminiService>((ref) {
 class GeminiService {
   GeminiService(String apiKey)
       : _model = GenerativeModel(
-          model: 'gemini-1.5-flash',
+          model: 'gemini-2.0-flash',
           apiKey: apiKey,
           generationConfig: GenerationConfig(
             responseMimeType: 'application/json',
@@ -111,12 +111,9 @@ Rules:
         'fit_preferences': p.fitPreferences,
         'wardrobe_items': wardrobe.map((item) => {
               'id': item['id'],
-              'name': item['name'],
               'category': item['category'],
               'colors': item['colors'],
-              'color_names': item['color_names'],
               'style_tags': item['style_tags'],
-              'season_tags': item['season_tags'],
             }).toList(),
       };
     }).toList();

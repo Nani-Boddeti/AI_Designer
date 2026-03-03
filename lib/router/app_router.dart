@@ -56,11 +56,12 @@ class AppRoutes {
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   final authStateListenable = _AuthStateListenable(ref);
+  ref.onDispose(authStateListenable.dispose);
 
   return GoRouter(
     initialLocation: AppRoutes.splash,
     refreshListenable: authStateListenable,
-    redirect: (context, state) async {
+    redirect: (context, state) {
       final authAsync = ref.read(authProvider);
       final authValue = authAsync.valueOrNull;
       final isLoading = authAsync.isLoading;
@@ -73,7 +74,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       final isOnSetup = state.matchedLocation == AppRoutes.householdSetup;
 
       if (authValue == null || !authValue.isAuthenticated) {
-        if (isOnSplash || isOnAuth) return null;
+        if (isOnAuth) return null;
         return AppRoutes.auth;
       }
 
@@ -106,12 +107,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.home,
         builder: (_, _) => const HomeScreen(),
-        routes: [
-          GoRoute(
-            path: 'profiles',
-            builder: (_, _) => const ProfileListScreen(),
-          ),
-        ],
       ),
       GoRoute(
         path: AppRoutes.profiles,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -186,6 +187,8 @@ class _MoreTab extends ConsumerWidget {
               trailing: IconButton(
                 icon: const Icon(Icons.copy_outlined),
                 onPressed: () {
+                  Clipboard.setData(ClipboardData(
+                      text: authState.household!.inviteCode));
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Invite code copied!')),
                   );

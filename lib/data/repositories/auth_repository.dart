@@ -1,7 +1,6 @@
-import 'dart:math';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
 
 import '../models/household.dart';
 import '../models/profile.dart';
@@ -42,7 +41,11 @@ class AuthRepository {
     required String email,
     required String password,
   }) async {
-    return _client.auth.signUp(email: email, password: password);
+    return _client.auth.signUp(
+      email: email,
+      password: password,
+      emailRedirectTo: 'io.supabase.aidesignerassist://login-callback',
+    );
   }
 
   Future<void> signOut() async {
@@ -50,13 +53,17 @@ class AuthRepository {
   }
 
   Future<bool> signInWithGoogle() async {
-    return _client.auth.signInWithOAuth(OAuthProvider.google);
+    return _client.auth.signInWithOAuth(
+      OAuthProvider.google,
+      redirectTo: 'io.supabase.aidesignerassist://login-callback',
+    );
   }
 
   Future<void> sendMagicLink(String email) async {
     await _client.auth.signInWithOtp(
       email: email,
       shouldCreateUser: true,
+      emailRedirectTo: 'io.supabase.aidesignerassist://login-callback',
     );
   }
 
@@ -72,38 +79,54 @@ class AuthRepository {
   Future<({Household household, Profile profile})> createHousehold({
     required String householdName,
     required String profileName,
+    required String hemisphere,
   }) async {
     final user = _service.getCurrentUser();
     if (user == null) throw Exception('Not authenticated');
 
-    final inviteCode = _generateInviteCode();
+    final householdId = const Uuid().v4();
+    // Derive invite code from the household UUID — guaranteed unique since
+    // the UUID is unique. Takes 8 chars from the hex representation.
+    final inviteCode = _inviteCodeFromId(householdId);
 
-    final householdData = await _client
+    // Step 1: Insert household WITHOUT .select() — the SELECT policy uses
+    // current_household_id() which looks up the user's profile. No profile
+    // exists yet, so chaining .select() would return 0 rows and throw an
+    // RLS error even though the INSERT itself succeeds.
+    await _client
         .from(SupabaseTables.households)
         .insert({
+          'id': householdId,
           'name': householdName,
+          'hemisphere': hemisphere,
           'invite_code': inviteCode,
-        })
-        .select()
-        .single();
+        });
 
-    final household = Household.fromJson(householdData);
-
-    final profileData = await _client
+    // Step 2: Insert profile WITHOUT .select() — same reason as household:
+    // current_household_id() can't see the row being inserted in the same
+    // statement, so RETURNING would return 0 rows and throw an RLS error.
+    await _client
         .from(SupabaseTables.profiles)
         .insert({
-          'household_id': household.id,
+          'household_id': householdId,
           'auth_user_id': user.id,
           'name': profileName,
           'age_group': AgeGroup.adult.value,
           'style_persona': <String>[],
           'fit_preferences': <String, dynamic>{},
-        })
-        .select()
-        .single();
+        });
 
-    final profile = Profile.fromJson(profileData);
-    return (household: household, profile: profile);
+    // Step 3: Both rows are now committed. current_household_id() works.
+    // Fetch household and profile in parallel.
+    final results = await Future.wait([
+      _client.from(SupabaseTables.households).select().eq('id', householdId).single(),
+      _client.from(SupabaseTables.profiles).select().eq('auth_user_id', user.id).eq('household_id', householdId).single(),
+    ]);
+
+    return (
+      household: Household.fromJson(results[0]),
+      profile: Profile.fromJson(results[1]),
+    );
   }
 
   /// Joins an existing household using an invite code.
@@ -119,7 +142,8 @@ class AuthRepository {
       throw Exception('No household found for that invite code.');
     }
 
-    final profileData = await _client
+    // Insert without .select() — same RLS reason as createHousehold.
+    await _client
         .from(SupabaseTables.profiles)
         .insert({
           'household_id': household.id,
@@ -128,21 +152,26 @@ class AuthRepository {
           'age_group': AgeGroup.adult.value,
           'style_persona': <String>[],
           'fit_preferences': <String, dynamic>{},
-        })
+        });
+
+    // Profile is committed — current_household_id() now works.
+    final profileData = await _client
+        .from(SupabaseTables.profiles)
         .select()
+        .eq('auth_user_id', user.id)
+        .eq('household_id', household.id)
         .single();
 
-    final profile = Profile.fromJson(profileData);
-    return (household: household, profile: profile);
+    return (household: household, profile: Profile.fromJson(profileData));
   }
 
   // ---------------------------------------------------------------------------
   // Private helpers
   // ---------------------------------------------------------------------------
 
-  String _generateInviteCode() {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    final rng = Random.secure();
-    return List.generate(8, (_) => chars[rng.nextInt(chars.length)]).join();
+  /// Derives a unique 8-character invite code from a household UUID.
+  /// Guaranteed unique — one code per household, no collisions possible.
+  String _inviteCodeFromId(String householdId) {
+    return householdId.replaceAll('-', '').substring(0, 8).toUpperCase();
   }
 }

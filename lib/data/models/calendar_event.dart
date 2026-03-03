@@ -32,7 +32,7 @@ class CalendarEvent {
       id: json['id'] as String,
       householdId: json['household_id'] as String,
       title: json['title'] as String,
-      eventDate: DateTime.parse(json['event_date'] as String),
+      eventDate: _parseLocalDate(json['event_date'] as String),
       occasion: json['occasion'] as String?,
       outfitAssignments:
           (json['outfit_assignments'] as Map<String, dynamic>?)?.map(
@@ -51,7 +51,7 @@ class CalendarEvent {
       'id': id,
       'household_id': householdId,
       'title': title,
-      'event_date': eventDate.toIso8601String(),
+      'event_date': eventDate.toIso8601String().split('T').first,
       if (occasion != null) 'occasion': occasion,
       'outfit_assignments': outfitAssignments,
       'weather_snapshot': weatherSnapshot,
@@ -81,6 +81,17 @@ class CalendarEvent {
       weatherSnapshot: weatherSnapshot ?? this.weatherSnapshot,
       notes: notes ?? this.notes,
       createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  /// Parses a DATE string (yyyy-MM-dd) as local midnight to avoid
+  /// UTC-offset shifting event days for users west of UTC.
+  static DateTime _parseLocalDate(String date) {
+    final parts = date.split('-');
+    return DateTime(
+      int.parse(parts[0]),
+      int.parse(parts[1]),
+      int.parse(parts[2]),
     );
   }
 

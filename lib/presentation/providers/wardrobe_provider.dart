@@ -36,20 +36,26 @@ class WardrobeNotifier extends AutoDisposeFamilyAsyncNotifier<List<WardrobeItem>
   String get currentStep => _currentStep;
 
   Future<WardrobeItem> addItem(Uint8List imageBytes) async {
+    final previous = state;
     final repo = ref.read(wardrobeRepositoryProvider);
     final profileId = arg;
 
     _currentStep = 'Starting…';
 
-    final item = await repo.addItem(
-      profileId: profileId,
-      imageBytes: imageBytes,
-      onStep: (step) => _currentStep = step,
-    );
-
-    // Prepend the new item to the local list.
-    state = AsyncData<List<WardrobeItem>>([item, ...(state.value ?? <WardrobeItem>[])]);
-    return item;
+    try {
+      final item = await repo.addItem(
+        profileId: profileId,
+        imageBytes: imageBytes,
+        onStep: (step) => _currentStep = step,
+      );
+      state = AsyncData<List<WardrobeItem>>([item, ...(state.value ?? <WardrobeItem>[])]);
+      return item;
+    } catch (e, st) {
+      state = AsyncError<List<WardrobeItem>>(e, st);
+      await Future.delayed(Duration.zero);
+      state = previous;
+      rethrow;
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -57,20 +63,34 @@ class WardrobeNotifier extends AutoDisposeFamilyAsyncNotifier<List<WardrobeItem>
   // ---------------------------------------------------------------------------
 
   Future<void> updateItem(WardrobeItem item) async {
-    final repo = ref.read(wardrobeRepositoryProvider);
-    final updated = await repo.updateItem(item);
-    final items = <WardrobeItem>[...(state.value ?? <WardrobeItem>[])];
-    final idx = items.indexWhere((i) => i.id == item.id);
-    if (idx >= 0) items[idx] = updated;
-    state = AsyncData<List<WardrobeItem>>(items);
+    final previous = state;
+    try {
+      final repo = ref.read(wardrobeRepositoryProvider);
+      final updated = await repo.updateItem(item);
+      final items = <WardrobeItem>[...(state.value ?? <WardrobeItem>[])];
+      final idx = items.indexWhere((i) => i.id == item.id);
+      if (idx >= 0) items[idx] = updated;
+      state = AsyncData<List<WardrobeItem>>(items);
+    } catch (e, st) {
+      state = AsyncError<List<WardrobeItem>>(e, st);
+      await Future.delayed(Duration.zero);
+      state = previous;
+    }
   }
 
   Future<void> deleteItem(String itemId) async {
-    final repo = ref.read(wardrobeRepositoryProvider);
-    await repo.deleteItem(itemId);
-    final items = <WardrobeItem>[...(state.value ?? <WardrobeItem>[])]
-      ..removeWhere((i) => i.id == itemId);
-    state = AsyncData<List<WardrobeItem>>(items);
+    final previous = state;
+    try {
+      final repo = ref.read(wardrobeRepositoryProvider);
+      await repo.deleteItem(itemId);
+      final items = <WardrobeItem>[...(state.value ?? <WardrobeItem>[])]
+        ..removeWhere((i) => i.id == itemId);
+      state = AsyncData<List<WardrobeItem>>(items);
+    } catch (e, st) {
+      state = AsyncError<List<WardrobeItem>>(e, st);
+      await Future.delayed(Duration.zero);
+      state = previous;
+    }
   }
 
   Future<void> refresh() async {

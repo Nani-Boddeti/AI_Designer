@@ -19,29 +19,53 @@ class CalendarNotifier extends AsyncNotifier<List<CalendarEvent>> {
   }
 
   Future<void> createEvent(CalendarEvent event) async {
-    final repo = ref.read(calendarRepositoryProvider);
-    final created = await repo.createEvent(event);
-    final existing = <CalendarEvent>[...(state.value ?? <CalendarEvent>[]), created];
-    existing.sort((a, b) => a.eventDate.compareTo(b.eventDate));
-    state = AsyncData<List<CalendarEvent>>(existing);
+    final previous = state;
+    try {
+      final repo = ref.read(calendarRepositoryProvider);
+      final created = await repo.createEvent(event);
+      final existing = <CalendarEvent>[...(state.value ?? <CalendarEvent>[]), created];
+      existing.sort((a, b) => a.eventDate.compareTo(b.eventDate));
+      state = AsyncData<List<CalendarEvent>>(existing);
+    } catch (e, st) {
+      state = AsyncError<List<CalendarEvent>>(e, st);
+      await Future.delayed(Duration.zero);
+      state = previous;
+      rethrow;
+    }
   }
 
   Future<void> updateEvent(CalendarEvent event) async {
-    final repo = ref.read(calendarRepositoryProvider);
-    final updated = await repo.updateEvent(event);
-    final events = <CalendarEvent>[...(state.value ?? <CalendarEvent>[])];
-    final idx = events.indexWhere((e) => e.id == event.id);
-    if (idx >= 0) events[idx] = updated;
-    events.sort((a, b) => a.eventDate.compareTo(b.eventDate));
-    state = AsyncData<List<CalendarEvent>>(events);
+    final previous = state;
+    try {
+      final repo = ref.read(calendarRepositoryProvider);
+      final updated = await repo.updateEvent(event);
+      final events = <CalendarEvent>[...(state.value ?? <CalendarEvent>[])];
+      final idx = events.indexWhere((e) => e.id == event.id);
+      if (idx >= 0) events[idx] = updated;
+      events.sort((a, b) => a.eventDate.compareTo(b.eventDate));
+      state = AsyncData<List<CalendarEvent>>(events);
+    } catch (e, st) {
+      state = AsyncError<List<CalendarEvent>>(e, st);
+      await Future.delayed(Duration.zero);
+      state = previous;
+      rethrow;
+    }
   }
 
   Future<void> deleteEvent(String eventId) async {
-    final repo = ref.read(calendarRepositoryProvider);
-    await repo.deleteEvent(eventId);
-    final events = <CalendarEvent>[...(state.value ?? <CalendarEvent>[])]
-      ..removeWhere((e) => e.id == eventId);
-    state = AsyncData<List<CalendarEvent>>(events);
+    final previous = state;
+    try {
+      final repo = ref.read(calendarRepositoryProvider);
+      await repo.deleteEvent(eventId);
+      final events = <CalendarEvent>[...(state.value ?? <CalendarEvent>[])]
+        ..removeWhere((e) => e.id == eventId);
+      state = AsyncData<List<CalendarEvent>>(events);
+    } catch (e, st) {
+      state = AsyncError<List<CalendarEvent>>(e, st);
+      await Future.delayed(Duration.zero);
+      state = previous;
+      rethrow;
+    }
   }
 
   Future<void> refresh() async {

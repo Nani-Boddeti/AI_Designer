@@ -51,9 +51,13 @@ class CalendarRepository {
   }
 
   Future<CalendarEvent> updateEvent(CalendarEvent event) async {
+    final json = event.toJson()
+      ..remove('id')
+      ..remove('created_at');
+
     final data = await _service.client
         .from(SupabaseTables.calendarEvents)
-        .update(event.toJson())
+        .update(json)
         .eq('id', event.id)
         .select()
         .single();
@@ -78,8 +82,8 @@ class CalendarRepository {
         .from(SupabaseTables.calendarEvents)
         .select()
         .eq('household_id', householdId)
-        .gte('event_date', from.toIso8601String())
-        .lte('event_date', to.toIso8601String())
+        .gte('event_date', from.toIso8601String().split('T').first)
+        .lte('event_date', to.toIso8601String().split('T').first)
         .order('event_date');
 
     return (data as List).map((e) => CalendarEvent.fromJson(e)).toList();

@@ -63,9 +63,13 @@ class WardrobeRepository {
   }
 
   Future<WardrobeItem> updateItem(WardrobeItem item) async {
+    final json = item.toJson()
+      ..remove('id')
+      ..remove('created_at');
+
     final data = await supabaseService.client
         .from(SupabaseTables.wardrobeItems)
-        .update(item.toJson())
+        .update(json)
         .eq('id', item.id)
         .select()
         .single();
@@ -158,10 +162,10 @@ class WardrobeRepository {
       'profile_id': profileId,
       'name': tags['name'] as String? ?? 'New Item',
       'category': tags['category'] as String? ?? WardrobeCategory.top.value,
-      'colors': (tags['colors'] as List?)?.cast<String>() ?? [],
-      'color_names': (tags['color_names'] as List?)?.cast<String>() ?? [],
-      'style_tags': (tags['style_tags'] as List?)?.cast<String>() ?? [],
-      'season_tags': (tags['season_tags'] as List?)?.cast<String>() ?? [],
+      'colors': _toStringList(tags['colors']),
+      'color_names': _toStringList(tags['color_names']),
+      'style_tags': _toStringList(tags['style_tags']),
+      'season_tags': _toStringList(tags['season_tags']),
       'image_url': imageUrl,
       // ignore: use_null_aware_elements
       if (processedImageUrl != null) 'processed_image_url': processedImageUrl,
@@ -176,5 +180,14 @@ class WardrobeRepository {
         .single();
 
     return WardrobeItem.fromJson(data);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------------
+
+  List<String> _toStringList(dynamic value) {
+    if (value is List) return value.map((e) => e.toString()).toList();
+    return [];
   }
 }

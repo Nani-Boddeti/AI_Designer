@@ -45,6 +45,15 @@ class _GapFillerScreenState extends ConsumerState<GapFillerScreen> {
   Widget build(BuildContext context) {
     final profilesAsync = ref.watch(profilesProvider);
 
+    // Set initial profile selection reactively without mutating state in build.
+    ref.listen<AsyncValue<List<Profile>>>(profilesProvider, (_, next) {
+      next.whenData((profiles) {
+        if (_selectedProfile == null && profiles.isNotEmpty) {
+          setState(() => _selectedProfile = profiles.first);
+        }
+      });
+    });
+
     return Scaffold(
       appBar: AppBar(title: const Text('Gap Filler')),
       body: profilesAsync.when(
@@ -54,7 +63,6 @@ class _GapFillerScreenState extends ConsumerState<GapFillerScreen> {
           if (profiles.isEmpty) {
             return const Center(child: Text('Add family members first.'));
           }
-          _selectedProfile ??= profiles.first;
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(20),

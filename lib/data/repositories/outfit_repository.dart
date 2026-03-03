@@ -87,7 +87,10 @@ class OutfitRepository {
     return rawList.map((raw) {
       final profileId = raw['profile_id'] as String? ?? '';
       final profileName = raw['profile_name'] as String? ?? '';
-      final itemIds = (raw['item_ids'] as List?)?.cast<String>() ?? [];
+      final rawItemIds = raw['item_ids'];
+      final itemIds = rawItemIds is List
+          ? rawItemIds.map((e) => e.toString()).toList()
+          : <String>[];
       final note = raw['styling_note'] as String? ?? '';
       final harmonyScore =
           (raw['harmony_score'] as num?)?.toDouble() ?? 0.75;

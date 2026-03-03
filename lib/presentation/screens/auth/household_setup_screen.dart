@@ -20,6 +20,7 @@ class _HouseholdSetupScreenState extends ConsumerState<HouseholdSetupScreen>
   final _householdNameCtrl = TextEditingController();
   final _createProfileNameCtrl = TextEditingController();
   final _createFormKey = GlobalKey<FormState>();
+  String _hemisphere = 'north';
 
   // Join household
   final _inviteCodeCtrl = TextEditingController();
@@ -47,6 +48,7 @@ class _HouseholdSetupScreenState extends ConsumerState<HouseholdSetupScreen>
     await ref.read(authProvider.notifier).createHousehold(
           householdName: _householdNameCtrl.text.trim(),
           profileName: _createProfileNameCtrl.text.trim(),
+          hemisphere: _hemisphere,
         );
     _showErrorIfNeeded();
   }
@@ -62,11 +64,14 @@ class _HouseholdSetupScreenState extends ConsumerState<HouseholdSetupScreen>
 
   void _showErrorIfNeeded() {
     if (!mounted) return;
-    final err = ref.read(authProvider).error;
+    // Read the inner AuthState.error — createHousehold/joinHousehold never
+    // set AsyncError (that would redirect to /auth), so AsyncValue.error
+    // is always null here. The error lives inside the AuthState data class.
+    final err = ref.read(authProvider).value?.error;
     if (err != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(err.toString()),
+          content: Text(err),
           backgroundColor: Theme.of(context).colorScheme.error,
         ),
       );
@@ -75,7 +80,12 @@ class _HouseholdSetupScreenState extends ConsumerState<HouseholdSetupScreen>
 
   @override
   Widget build(BuildContext context) {
-    final isLoading = ref.watch(authProvider).isLoading;
+    final authAsync = ref.watch(authProvider);
+    // The outer AsyncValue.isLoading covers sign-in/sign-out operations.
+    // The inner AuthState.isLoading covers createHousehold/joinHousehold
+    // (which deliberately stay as AsyncData to avoid router redirect bugs).
+    final isLoading =
+        authAsync.isLoading || (authAsync.value?.isLoading ?? false);
 
     return Scaffold(
       body: Column(
@@ -160,7 +170,7 @@ class _HouseholdSetupScreenState extends ConsumerState<HouseholdSetupScreen>
                 prefixIcon: Icon(Icons.house_outlined),
               ),
               validator: (v) =>
-                  v == null || v.isEmpty ? 'Enter a household name' : null,
+                  (v?.trim().isEmpty ?? true) ? 'Enter a household name' : null,
             ),
             const SizedBox(height: 16),
             TextFormField(
@@ -171,7 +181,36 @@ class _HouseholdSetupScreenState extends ConsumerState<HouseholdSetupScreen>
                 prefixIcon: Icon(Icons.person_outline),
               ),
               validator: (v) =>
-                  v == null || v.isEmpty ? 'Enter your name' : null,
+                  (v?.trim().isEmpty ?? true) ? 'Enter your name' : null,
+            ),
+            const SizedBox(height: 24),
+            Text('Your hemisphere',
+                style: Theme.of(context).textTheme.labelLarge),
+            const SizedBox(height: 4),
+            Text(
+              'Used to match seasons correctly for outfit suggestions.',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 10),
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(
+                  value: 'north',
+                  label: Text('Northern'),
+                  icon: Icon(Icons.north),
+                ),
+                ButtonSegment(
+                  value: 'south',
+                  label: Text('Southern'),
+                  icon: Icon(Icons.south),
+                ),
+              ],
+              selected: {_hemisphere},
+              onSelectionChanged: (val) =>
+                  setState(() => _hemisphere = val.first),
             ),
             const SizedBox(height: 32),
             FilledButton.icon(
@@ -215,7 +254,7 @@ class _HouseholdSetupScreenState extends ConsumerState<HouseholdSetupScreen>
                 prefixIcon: Icon(Icons.vpn_key_outlined),
               ),
               validator: (v) =>
-                  v == null || v.length < 6 ? 'Enter the 8-character code' : null,
+                  (v?.trim().length ?? 0) != 8 ? 'Enter the 8-character code' : null,
             ),
             const SizedBox(height: 16),
             TextFormField(
@@ -226,7 +265,7 @@ class _HouseholdSetupScreenState extends ConsumerState<HouseholdSetupScreen>
                 prefixIcon: Icon(Icons.person_outline),
               ),
               validator: (v) =>
-                  v == null || v.isEmpty ? 'Enter your name' : null,
+                  (v?.trim().isEmpty ?? true) ? 'Enter your name' : null,
             ),
             const SizedBox(height: 32),
             FilledButton.icon(

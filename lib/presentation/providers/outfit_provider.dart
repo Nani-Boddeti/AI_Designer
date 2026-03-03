@@ -4,6 +4,7 @@ import '../../data/models/outfit.dart';
 import '../../data/models/profile.dart';
 import '../../data/repositories/outfit_repository.dart';
 import '../../domain/usecases/generate_outfits_usecase.dart';
+import '../providers/auth_provider.dart';
 
 // ---------------------------------------------------------------------------
 // Generated outfits holder (in-memory for current session)
@@ -20,11 +21,14 @@ class GeneratedOutfitsNotifier extends Notifier<List<GeneratedOutfit>> {
     double? latitude,
     double? longitude,
   }) async {
+    final hemisphere =
+        ref.read(authProvider).value?.household?.hemisphere ?? 'north';
     final useCase = ref.read(generateOutfitsUseCaseProvider);
     final results = await useCase.execute(
       profiles: profiles,
       occasion: occasion,
       eventDate: eventDate,
+      hemisphere: hemisphere,
       latitude: latitude,
       longitude: longitude,
     );

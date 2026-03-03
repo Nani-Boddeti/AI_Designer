@@ -10,6 +10,9 @@ import '../../data/models/profile.dart';
 // Auth state data class
 // ---------------------------------------------------------------------------
 
+// Sentinel so copyWith can distinguish "clear error" from "keep error".
+const _kKeepError = Object();
+
 class AuthState {
   const AuthState({
     this.user,
@@ -34,14 +37,15 @@ class AuthState {
     Profile? profile,
     Household? household,
     bool? isLoading,
-    String? error,
+    // Pass null to clear, omit entirely to keep the existing value.
+    Object? error = _kKeepError,
   }) {
     return AuthState(
       user: user ?? this.user,
       profile: profile ?? this.profile,
       household: household ?? this.household,
       isLoading: isLoading ?? this.isLoading,
-      error: error,
+      error: identical(error, _kKeepError) ? this.error : error as String?,
     );
   }
 }
@@ -56,14 +60,25 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     final svc = ref.watch(supabaseServiceProvider);
 
     // Listen to Supabase auth state changes and refresh accordingly.
-    svc.client.auth.onAuthStateChange.listen((event) {
+    final subscription = svc.client.auth.onAuthStateChange.listen((event) {
       if (event.event == AuthChangeEvent.signedIn ||
           event.event == AuthChangeEvent.tokenRefreshed) {
-        ref.invalidateSelf();
+        // Skip if an explicit sign-in method (signInWithEmail, etc.) is
+        // already managing the state — it will call _buildFromCurrentSession
+        // directly. Only invalidate for external events (magic link, OAuth,
+        // token refresh) where no explicit method is in flight.
+        // Also skip if an inner-AsyncData operation (createHousehold,
+        // joinHousehold) is in flight — they use AuthState.isLoading instead
+        // of AsyncValue.isLoading to avoid the router-redirect bug.
+        final innerLoading = state.value?.isLoading ?? false;
+        if (!state.isLoading && !innerLoading) {
+          ref.invalidateSelf();
+        }
       } else if (event.event == AuthChangeEvent.signedOut) {
         state = const AsyncData(AuthState());
       }
     });
+    ref.onDispose(subscription.cancel);
 
     return _buildFromCurrentSession(svc);
   }
@@ -73,12 +88,18 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     if (user == null) return const AuthState();
 
     try {
-      final profile = await svc.getCurrentProfile();
+      final profile = await svc
+          .getCurrentProfile()
+          .timeout(const Duration(seconds: 10));
       if (profile == null) return AuthState(user: user);
 
-      final household = await svc.getHousehold(profile.householdId);
+      final household = await svc
+          .getHousehold(profile.householdId)
+          .timeout(const Duration(seconds: 10));
       return AuthState(user: user, profile: profile, household: household);
     } catch (_) {
+      // Profile/household fetch failed (RLS, timeout, network) — user is still
+      // authenticated, router will redirect to household-setup.
       return AuthState(user: user);
     }
   }
@@ -94,7 +115,11 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
       final repo = ref.read(authRepositoryProvider);
-      await repo.signInWithEmail(email: email, password: password);
+      await repo
+          .signInWithEmail(email: email, password: password)
+          .timeout(const Duration(seconds: 15),
+              onTimeout: () => throw Exception(
+                  'Connection timed out. Check your internet and try again.'));
       return _buildFromCurrentSession(ref.read(supabaseServiceProvider));
     });
   }
@@ -112,59 +137,72 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
   }
 
   Future<void> sendMagicLink(String email) async {
+    // Capture before AsyncLoading wipes state.value.
+    final prev = state.value ?? const AuthState();
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
       await ref.read(authRepositoryProvider).sendMagicLink(email);
-      // Return current state unchanged — user isn't signed in yet,
-      // they tap the link in their email to complete sign-in.
-      return const AuthState();
+      return prev;
     });
   }
 
   Future<void> signOut() async {
     state = const AsyncLoading();
-    await ref.read(authRepositoryProvider).signOut();
-    state = const AsyncData(AuthState());
+    state = await AsyncValue.guard(() async {
+      await ref.read(authRepositoryProvider).signOut();
+      return const AuthState();
+    });
   }
 
   Future<void> createHousehold({
     required String householdName,
     required String profileName,
+    required String hemisphere,
   }) async {
-    state = const AsyncLoading();
-    state = await AsyncValue.guard(() async {
+    // IMPORTANT: Do NOT use AsyncValue.guard here. If it throws, guard would
+    // set AsyncError which makes valueOrNull == null, causing the router to
+    // redirect the user back to /auth even though they are still authenticated.
+    // Instead, keep state as AsyncData and store the error inside AuthState.
+    final prev = state.value ?? const AuthState();
+    state = AsyncData(prev.copyWith(isLoading: true, error: null));
+    try {
       final repo = ref.read(authRepositoryProvider);
       final result = await repo.createHousehold(
         householdName: householdName,
         profileName: profileName,
+        hemisphere: hemisphere,
       );
-      final user = repo.currentUser;
-      return AuthState(
-        user: user,
+      state = AsyncData(AuthState(
+        user: repo.currentUser,
         profile: result.profile,
         household: result.household,
-      );
-    });
+      ));
+    } catch (e) {
+      state = AsyncData(prev.copyWith(isLoading: false, error: e.toString()));
+    }
   }
 
   Future<void> joinHousehold({
     required String inviteCode,
     required String profileName,
   }) async {
-    state = const AsyncLoading();
-    state = await AsyncValue.guard(() async {
+    // Same pattern as createHousehold — never AsyncError while authenticated.
+    final prev = state.value ?? const AuthState();
+    state = AsyncData(prev.copyWith(isLoading: true, error: null));
+    try {
       final repo = ref.read(authRepositoryProvider);
       final result = await repo.joinHousehold(
         inviteCode: inviteCode,
         profileName: profileName,
       );
-      final user = repo.currentUser;
-      return AuthState(
-        user: user,
+      state = AsyncData(AuthState(
+        user: repo.currentUser,
         profile: result.profile,
         household: result.household,
-      );
-    });
+      ));
+    } catch (e) {
+      state = AsyncData(prev.copyWith(isLoading: false, error: e.toString()));
+    }
   }
 }
 

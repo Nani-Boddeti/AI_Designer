@@ -40,10 +40,11 @@ class Profile {
       name: json['name'] as String,
       avatarUrl: json['avatar_url'] as String?,
       ageGroup: AgeGroup.fromString(json['age_group'] as String? ?? 'adult'),
-      stylePersona: (json['style_persona'] as List<dynamic>?)
-              ?.map((e) => e.toString())
-              .toList() ??
-          [],
+      stylePersona: json['style_persona'] is List
+          ? (json['style_persona'] as List<dynamic>)
+              .map((e) => e.toString())
+              .toList()
+          : [],
       fitPreferences:
           (json['fit_preferences'] as Map<String, dynamic>?) ?? {},
       createdAt: DateTime.parse(json['created_at'] as String),

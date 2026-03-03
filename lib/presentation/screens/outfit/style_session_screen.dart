@@ -62,7 +62,7 @@ class _StyleSessionScreenState extends ConsumerState<StyleSessionScreen> {
         // Use mock weather.
         final svc = ref.read(weatherServiceProvider);
         final w = await svc.getWeather(lat: 40.7128, lon: -74.0060, date: _selectedDate);
-        setState(() => _weather = w);
+        if (mounted) setState(() => _weather = w);
         return;
       }
       final pos = await Geolocator.getCurrentPosition(
@@ -71,7 +71,7 @@ class _StyleSessionScreenState extends ConsumerState<StyleSessionScreen> {
       final svc = ref.read(weatherServiceProvider);
       final w = await svc.getWeather(
           lat: pos.latitude, lon: pos.longitude, date: _selectedDate);
-      setState(() => _weather = w);
+      if (mounted) setState(() => _weather = w);
     } catch (_) {
       // Non-fatal.
     } finally {

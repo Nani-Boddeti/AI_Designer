@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../core/constants/app_constants.dart';
 import '../../../data/models/wardrobe_item.dart';
 import '../../providers/wardrobe_provider.dart';
 
@@ -22,6 +24,8 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
   String _step = '';
   String? _errorMessage;
   WardrobeItem? _result;
+  Timer? _stepPollTimer;
+  List<String> _selectedSeasons = [];
 
   Future<void> _pickImage(ImageSource source) async {
     final picker = ImagePicker();
@@ -57,6 +61,7 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
 
       setState(() {
         _result = item;
+        _selectedSeasons = [];
         _isProcessing = false;
         _step = 'Done!';
       });
@@ -69,15 +74,21 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
   }
 
   void _startStepPolling() {
-    // Poll the notifier's currentStep every 300ms.
-    Future.doWhile(() async {
-      if (!mounted) return false;
+    _stepPollTimer?.cancel();
+    _stepPollTimer = Timer.periodic(const Duration(milliseconds: 300), (_) {
+      if (!mounted || !_isProcessing) {
+        _stepPollTimer?.cancel();
+        return;
+      }
       final notifier = ref.read(wardrobeProvider(widget.profileId).notifier);
       setState(() => _step = notifier.currentStep);
-      if (!_isProcessing) return false;
-      await Future.delayed(const Duration(milliseconds: 300));
-      return true;
     });
+  }
+
+  @override
+  void dispose() {
+    _stepPollTimer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -197,11 +208,26 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
             if (_result != null) ...[
               const SizedBox(height: 16),
               _ResultCard(item: _result!),
+              if (_result!.seasonTags.isEmpty) ...[
+                const SizedBox(height: 16),
+                _SeasonFallbackPicker(
+                  selected: _selectedSeasons,
+                  onToggle: (season) => setState(() {
+                    _selectedSeasons.contains(season)
+                        ? _selectedSeasons.remove(season)
+                        : _selectedSeasons.add(season);
+                  }),
+                ),
+              ],
               const SizedBox(height: 16),
               FilledButton.icon(
-                onPressed: () => Navigator.of(context).pop(),
+                onPressed: _doneOrSaveSeasons,
                 icon: const Icon(Icons.check_circle_outline),
-                label: const Text('Done'),
+                label: Text(
+                  _result!.seasonTags.isEmpty
+                      ? (_selectedSeasons.isNotEmpty ? 'Save & Done' : 'Skip')
+                      : 'Done',
+                ),
               ),
               const SizedBox(height: 8),
               OutlinedButton.icon(
@@ -209,6 +235,7 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
                   setState(() {
                     _imageBytes = null;
                     _result = null;
+                    _selectedSeasons = [];
                     _step = '';
                   });
                 },
@@ -220,6 +247,17 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _doneOrSaveSeasons() async {
+    if (_result != null && _result!.seasonTags.isEmpty) {
+      final seasons =
+          _selectedSeasons.isNotEmpty ? _selectedSeasons : ['Untagged'];
+      final notifier =
+          ref.read(wardrobeProvider(widget.profileId).notifier);
+      await notifier.updateItem(_result!.copyWith(seasonTags: seasons));
+    }
+    if (mounted) Navigator.of(context).pop();
   }
 
   void _showSourceSheet() {
@@ -365,6 +403,59 @@ class _ResultCard extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Season fallback picker
+// ---------------------------------------------------------------------------
+
+class _SeasonFallbackPicker extends StatelessWidget {
+  const _SeasonFallbackPicker({
+    required this.selected,
+    required this.onToggle,
+  });
+
+  final List<String> selected;
+  final void Function(String season) onToggle;
+
+  static const _seasons = SeasonOptions.all;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.info_outline, size: 16, color: Colors.orange),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                'AI couldn\'t detect the season. Tag it now — untagged items won\'t appear in outfit suggestions.',
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: Colors.orange),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          children: _seasons
+              .map((s) => FilterChip(
+                    label: Text(s),
+                    selected: selected.contains(s),
+                    onSelected: (_) => onToggle(s),
+                    visualDensity: VisualDensity.compact,
+                  ))
+              .toList(),
+        ),
+      ],
     );
   }
 }

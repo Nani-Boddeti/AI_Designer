@@ -97,15 +97,21 @@ class _ItemDetailScreenState extends ConsumerState<ItemDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Keep item in sync.
-    final items = ref.watch(wardrobeProvider(widget.profileId)).value ?? [];
-    final fresh = items.cast<WardrobeItem?>().firstWhere(
-          (i) => i?.id == widget.itemId,
-          orElse: () => _item,
-        );
-    if (fresh != null && fresh.id == widget.itemId && fresh != _item) {
-      _item = fresh;
-    }
+    // Keep item in sync with wardrobe provider reactively.
+    ref.listen<AsyncValue<List<WardrobeItem>>>(
+      wardrobeProvider(widget.profileId),
+      (_, next) {
+        next.whenData((items) {
+          final fresh = items.cast<WardrobeItem?>().firstWhere(
+                (i) => i?.id == widget.itemId,
+                orElse: () => null,
+              );
+          if (fresh != null && fresh != _item) {
+            setState(() => _item = fresh);
+          }
+        });
+      },
+    );
 
     if (_item == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
