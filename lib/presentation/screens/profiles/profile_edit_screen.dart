@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../providers/profile_provider.dart';
@@ -62,6 +63,57 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
   }
 
   Future<void> _pickAvatar() async {
+    final status = await Permission.photos.status;
+
+    // Already have full or partial access — proceed directly.
+    if (status.isGranted || status.isLimited) {
+      // Fall through to picker below.
+    } else if (status.isPermanentlyDenied) {
+      if (mounted) {
+        showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Photo Access Denied'),
+            content: const Text(
+              'Photo library permission was permanently denied.\n\n'
+              'To set a profile photo, open Settings and grant Photos access.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  openAppSettings();
+                },
+                child: const Text('Open Settings'),
+              ),
+            ],
+          ),
+        );
+      }
+      return;
+    }
+
+    if (status.isDenied) {
+      final result = await Permission.photos.request();
+      // Accept both full and partial (limited) access — picker works with either.
+      if (!result.isGranted && !result.isLimited) return;
+      if (result.isLimited && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Access granted to selected photos only.'),
+            action: SnackBarAction(
+              label: 'Change',
+              onPressed: openAppSettings,
+            ),
+          ),
+        );
+      }
+    }
+
     final picker = ImagePicker();
     final picked = await picker.pickImage(
       source: ImageSource.gallery,

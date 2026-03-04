@@ -60,12 +60,32 @@ class _StyleSessionScreenState extends ConsumerState<StyleSessionScreen> {
       if (permission == LocationPermission.denied) {
         effectivePermission = await Geolocator.requestPermission();
       }
-      if (effectivePermission == LocationPermission.deniedForever ||
-          effectivePermission == LocationPermission.denied) {
-        // Use mock weather.
+      if (effectivePermission == LocationPermission.deniedForever) {
+        // Permanently denied — inform user and offer Settings shortcut.
+        // Weather will use a default location (non-fatal).
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text(
+                'Location access permanently denied — weather shown for a default location.',
+              ),
+              duration: const Duration(seconds: 5),
+              action: SnackBarAction(
+                label: 'Settings',
+                onPressed: Geolocator.openAppSettings,
+              ),
+            ),
+          );
+        }
         final svc = ref.read(weatherServiceProvider);
-        final w = await svc.getWeather(lat: 40.7128, lon: -74.0060, date: _selectedDate);
+        final w = await svc.getWeather(
+            lat: 40.7128, lon: -74.0060, date: _selectedDate);
         if (mounted) setState(() => _weather = w);
+        return;
+      }
+
+      if (effectivePermission == LocationPermission.denied) {
+        // User just denied the dialog — respect the choice, skip weather silently.
         return;
       }
       final pos = await Geolocator.getCurrentPosition(

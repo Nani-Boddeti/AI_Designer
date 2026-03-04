@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../data/models/wardrobe_item.dart';
@@ -29,9 +30,11 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
   List<String> _selectedSeasons = [];
 
   Future<void> _pickImage(ImageSource source) async {
+    final granted = await _ensurePermission(source);
+    if (!granted) return;
+
     final picker = ImagePicker();
-    final picked =
-        await picker.pickImage(source: source, imageQuality: 90);
+    final picked = await picker.pickImage(source: source, imageQuality: 90);
     if (picked == null) return;
     final bytes = await picked.readAsBytes();
     setState(() {
@@ -39,6 +42,73 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
       _result = null;
       _errorMessage = null;
     });
+  }
+
+  /// Returns true if the required permission is granted or limited (partial).
+  /// On Android 14+, "limited" means the user selected specific photos —
+  /// image_picker still works; picker shows only their selected photos.
+  /// Shows a Settings dialog only when permanently denied.
+  Future<bool> _ensurePermission(ImageSource source) async {
+    final permission =
+        source == ImageSource.camera ? Permission.camera : Permission.photos;
+    final status = await permission.status;
+
+    // Both full and partial (limited) access allow image picking.
+    if (status.isGranted || status.isLimited) return true;
+
+    if (status.isPermanentlyDenied) {
+      if (mounted) _showPermissionDeniedDialog(source);
+      return false;
+    }
+
+    // System shows the dialog — on Android 14+ this includes
+    // "All photos" / "Select photos" / "Don't allow".
+    final result = await permission.request();
+    if ((result.isGranted || result.isLimited) && result.isLimited && mounted) {
+      // User chose partial access — let them know they can change it later.
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Access granted to selected photos only.'),
+          action: SnackBarAction(
+            label: 'Change',
+            onPressed: openAppSettings,
+          ),
+        ),
+      );
+    }
+    return result.isGranted || result.isLimited;
+  }
+
+  void _showPermissionDeniedDialog(ImageSource source) {
+    final isCamera = source == ImageSource.camera;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(isCamera ? 'Camera Access Denied' : 'Photo Access Denied'),
+        content: Text(
+          isCamera
+              ? 'Camera permission was permanently denied.\n\n'
+                  'You can still add wardrobe items using Gallery.\n\n'
+                  'To enable Camera, open Settings and grant Camera access.'
+              : 'Photo library permission was permanently denied.\n\n'
+                  'You can still add wardrobe items using Camera.\n\n'
+                  'To enable Photos, open Settings and grant Photos access.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              openAppSettings();
+            },
+            child: const Text('Open Settings'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _processAndSave() async {

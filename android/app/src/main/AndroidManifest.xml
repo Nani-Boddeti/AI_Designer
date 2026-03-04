@@ -1,5 +1,28 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
+    <!-- MANDATORY: internet access — all features require this (auto-granted, no dialog) -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- OPTIONAL: location — used for accurate weather in outfit suggestions.
+         If denied, weather falls back to a default location. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+
+    <!-- OPTIONAL: camera — used to photograph wardrobe items.
+         If denied, gallery can still be used. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+
+    <!-- OPTIONAL: photo library — used to pick wardrobe/avatar photos from gallery.
+         Android 14+: READ_MEDIA_VISUAL_USER_SELECTED enables "Select photos" partial access.
+         Android 13:  READ_MEDIA_IMAGES (full access).
+         Android <13: READ_EXTERNAL_STORAGE.
+         Partial access (limited) is treated the same as full — picker still works.
+         If denied entirely, camera can still be used. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED"/>
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32"/>
+
     <application
         android:label="ai_designer_assist"
         android:name="${applicationName}"
