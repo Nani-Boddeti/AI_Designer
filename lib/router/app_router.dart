@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../presentation/providers/auth_provider.dart';
+import '../presentation/providers/onboarding_provider.dart';
 import '../presentation/screens/auth/auth_screen.dart';
 import '../presentation/screens/auth/household_setup_screen.dart';
 import '../presentation/screens/calendar/style_calendar_screen.dart';
@@ -13,8 +14,10 @@ import '../presentation/screens/outfit/virtual_lineup_screen.dart';
 import '../presentation/screens/profiles/profile_edit_screen.dart';
 import '../presentation/screens/profiles/profile_list_screen.dart';
 import '../presentation/screens/shopping/gap_filler_screen.dart';
+import '../presentation/screens/onboarding/onboarding_screen.dart';
 import '../presentation/screens/splash/splash_screen.dart';
 import '../presentation/screens/more/contact_us_screen.dart';
+import '../presentation/screens/more/privacy_policy_screen.dart';
 import '../presentation/screens/subscription/subscription_screen.dart';
 import '../presentation/screens/wardrobe/add_item_screen.dart';
 import '../presentation/screens/wardrobe/item_detail_screen.dart';
@@ -44,6 +47,8 @@ class AppRoutes {
   static const String calendar = '/calendar';
   static const String subscription = '/subscription';
   static const String contactUs = '/contact-us';
+  static const String privacyPolicy = '/privacy-policy';
+  static const String onboarding = '/onboarding';
   static const String savedOutfits = '/saved-outfits/:profileId';
 
   // Helper to build concrete paths.
@@ -92,8 +97,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         return AppRoutes.householdSetup;
       }
 
-      // Authenticated and has household — push off splash/auth.
-      if (isOnSplash || isOnAuth || isOnSetup) {
+      // Show onboarding once after first household setup.
+      final hasSeenOnboarding = ref.read(onboardingProvider);
+      if (!hasSeenOnboarding) {
+        if (state.matchedLocation == AppRoutes.onboarding) return null;
+        return AppRoutes.onboarding;
+      }
+
+      // Authenticated and has household — push off splash/auth/setup/onboarding.
+      if (isOnSplash || isOnAuth || isOnSetup ||
+          state.matchedLocation == AppRoutes.onboarding) {
         return AppRoutes.home;
       }
 
@@ -111,6 +124,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.householdSetup,
         builder: (_, _) => const HouseholdSetupScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.onboarding,
+        builder: (_, _) => const OnboardingScreen(),
       ),
       GoRoute(
         path: AppRoutes.home,
@@ -177,6 +194,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.contactUs,
         builder: (_, _) => const ContactUsScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.privacyPolicy,
+        builder: (_, _) => const PrivacyPolicyScreen(),
       ),
       GoRoute(
         path: AppRoutes.savedOutfits,

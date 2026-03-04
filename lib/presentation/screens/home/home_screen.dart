@@ -236,6 +236,11 @@ class _MoreTab extends ConsumerWidget {
             subtitle: 'Support & feedback',
             onTap: () => context.push(AppRoutes.contactUs),
           ),
+          _MoreTile(
+            icon: Icons.privacy_tip_outlined,
+            title: 'Privacy Policy',
+            onTap: () => context.push(AppRoutes.privacyPolicy),
+          ),
           const Divider(),
           if (authState?.household != null)
             ListTile(
@@ -278,6 +283,41 @@ class _MoreTab extends ConsumerWidget {
             textColor: colorScheme.error,
             onTap: () async {
               await ref.read(authProvider.notifier).signOut();
+            },
+          ),
+          _MoreTile(
+            icon: Icons.delete_forever_outlined,
+            title: 'Delete Account',
+            subtitle: 'Permanently removes all your data',
+            textColor: colorScheme.error,
+            onTap: () async {
+              final confirmed = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Delete Account?'),
+                  content: const Text(
+                    'This permanently deletes all your wardrobe items, '
+                    'outfits, calendar events, and your account. '
+                    'This action cannot be undone.',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      child: const Text('Cancel'),
+                    ),
+                    FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: colorScheme.error,
+                      ),
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: const Text('Delete'),
+                    ),
+                  ],
+                ),
+              );
+              if (confirmed == true) {
+                await ref.read(authProvider.notifier).deleteAccount();
+              }
             },
           ),
           const SizedBox(height: 24),

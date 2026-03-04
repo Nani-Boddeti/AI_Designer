@@ -52,6 +52,58 @@ class AuthRepository {
     await _client.auth.signOut();
   }
 
+  /// Deletes all storage files for the user's profiles, then calls the
+  /// `delete_account` RPC which removes DB rows and the auth user.
+  Future<void> deleteAccount() async {
+    final user = _service.getCurrentUser();
+    if (user == null) throw Exception('Not authenticated');
+
+    // Fetch all profiles owned by this auth user.
+    final profileRows = await _client
+        .from(SupabaseTables.profiles)
+        .select('id')
+        .eq('auth_user_id', user.id);
+
+    for (final row in profileRows as List) {
+      final profileId = row['id'] as String;
+
+      // Delete wardrobe storage files (both buckets, silently ignore errors).
+      for (final bucket in [
+        SupabaseBuckets.wardrobeImages,
+        SupabaseBuckets.processedImages,
+      ]) {
+        try {
+          final files = await _client.storage
+              .from(bucket)
+              .list(path: 'wardrobe/$profileId');
+          for (final folder in files) {
+            final folderFiles = await _client.storage
+                .from(bucket)
+                .list(path: 'wardrobe/$profileId/${folder.name}');
+            final paths = folderFiles
+                .map((f) => 'wardrobe/$profileId/${folder.name}/${f.name}')
+                .toList();
+            if (paths.isNotEmpty) {
+              await _client.storage.from(bucket).remove(paths);
+            }
+          }
+        } catch (_) {
+          // Storage deletion is best-effort — proceed even if it fails.
+        }
+      }
+
+      // Delete avatar file.
+      try {
+        await _client.storage
+            .from(SupabaseBuckets.avatars)
+            .remove(['avatars/$profileId/avatar.jpg']);
+      } catch (_) {}
+    }
+
+    // Delete DB rows and auth user via RPC.
+    await _client.rpc('delete_account');
+  }
+
   Future<bool> signInWithGoogle() async {
     return _client.auth.signInWithOAuth(
       OAuthProvider.google,

@@ -24,6 +24,7 @@ Future<void> main() async {
   );
 
   await Hive.initFlutter();
+  await Hive.openBox('app_settings');
 
   runApp(const ProviderScope(child: VibeVaultApp()));
 }

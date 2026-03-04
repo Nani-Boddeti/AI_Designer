@@ -184,6 +184,19 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     }
   }
 
+  Future<void> deleteAccount() async {
+    // Same pattern as createHousehold — never set AsyncError while the user is
+    // still mid-operation; store errors inside AuthState instead.
+    final prev = state.value ?? const AuthState();
+    state = AsyncData(prev.copyWith(isLoading: true, error: null));
+    try {
+      await ref.read(authRepositoryProvider).deleteAccount();
+      state = const AsyncData(AuthState());
+    } catch (e) {
+      state = AsyncData(prev.copyWith(isLoading: false, error: e.toString()));
+    }
+  }
+
   Future<void> joinHousehold({
     required String inviteCode,
     required String profileName,
