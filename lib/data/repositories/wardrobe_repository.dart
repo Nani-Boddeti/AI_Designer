@@ -41,12 +41,17 @@ class WardrobeRepository {
   // CRUD
   // ---------------------------------------------------------------------------
 
-  Future<List<WardrobeItem>> getItemsForProfile(String profileId) async {
+  Future<List<WardrobeItem>> getItemsForProfile(
+    String profileId, {
+    int limit = 20,
+    int offset = 0,
+  }) async {
     final data = await supabaseService.client
         .from(SupabaseTables.wardrobeItems)
         .select()
         .eq('profile_id', profileId)
-        .order('created_at', ascending: false);
+        .order('created_at', ascending: false)
+        .range(offset, offset + limit - 1);
 
     return (data as List).map((e) => WardrobeItem.fromJson(e)).toList();
   }
@@ -163,7 +168,8 @@ class WardrobeRepository {
       'id': itemId,
       'profile_id': profileId,
       'name': tags['name'] as String? ?? 'New Item',
-      'category': tags['category'] as String? ?? WardrobeCategory.top.value,
+      'category': (tags['category'] as String?)?.toLowerCase().trim() ??
+          WardrobeCategory.top.value,
       'colors': _toStringList(tags['colors']),
       'color_names': _toStringList(tags['color_names']),
       'style_tags': _toStringList(tags['style_tags']),

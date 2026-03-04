@@ -61,7 +61,7 @@ enum WardrobeCategory {
 
   static WardrobeCategory fromString(String value) {
     return WardrobeCategory.values.firstWhere(
-      (e) => e.name == value,
+      (e) => e.name == value.toLowerCase().trim(),
       orElse: () => WardrobeCategory.top,
     );
   }

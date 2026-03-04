@@ -32,11 +32,45 @@ class WardrobeNotifier extends AsyncNotifier<List<WardrobeItem>> {
   WardrobeNotifier(this._profileId);
   final String _profileId;
 
+  static const _pageSize = 20;
+  int _offset = 0;
+  bool _hasMore = true;
+  bool _isLoadingMore = false;
+
+  bool get hasMore => _hasMore;
+  bool get isLoadingMore => _isLoadingMore;
+
   @override
   Future<List<WardrobeItem>> build() async {
-    return ref
+    _offset = 0;
+    _hasMore = true;
+    _isLoadingMore = false;
+    final items = await ref
         .watch(wardrobeRepositoryProvider)
-        .getItemsForProfile(_profileId);
+        .getItemsForProfile(_profileId, limit: _pageSize, offset: 0);
+    _hasMore = items.length == _pageSize;
+    _offset = items.length;
+    return items;
+  }
+
+  Future<void> loadMore() async {
+    if (!_hasMore || _isLoadingMore) return;
+    _isLoadingMore = true;
+    try {
+      final repo = ref.read(wardrobeRepositoryProvider);
+      final newItems = await repo.getItemsForProfile(
+        _profileId,
+        limit: _pageSize,
+        offset: _offset,
+      );
+      _hasMore = newItems.length == _pageSize;
+      _offset += newItems.length;
+      state = AsyncData<List<WardrobeItem>>(
+        <WardrobeItem>[...(state.value ?? <WardrobeItem>[]), ...newItems],
+      );
+    } finally {
+      _isLoadingMore = false;
+    }
   }
 
   // ---------------------------------------------------------------------------

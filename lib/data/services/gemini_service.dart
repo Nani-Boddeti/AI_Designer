@@ -49,25 +49,39 @@ class GeminiService {
   Future<Map<String, dynamic>> tagWardrobeItem(Uint8List imageBytes) async {
     const prompt = '''
 You are a professional fashion stylist and clothing analyst.
-Analyse the clothing item in the image and return a JSON object with exactly these fields:
+Carefully examine the image and identify the clothing item or the most prominent clothing item shown.
 
+CATEGORY DEFINITIONS — pick the single best match:
+  "top"       → shirts, t-shirts, blouses, tanks, crop tops, sweaters, hoodies, cardigans, polo shirts
+  "bottom"    → pants, jeans, trousers, shorts, skirts, leggings, culottes
+  "dress"     → one-piece dresses, jumpsuits, rompers, co-ord sets worn as one piece
+  "outerwear" → jackets, coats, blazers, parkas, windbreakers, bombers, vests
+  "shoes"     → sneakers, boots, heels, sandals, loafers, any footwear
+  "accessory" → bags, belts, scarves, hats, caps, sunglasses, jewelry, watches, ties
+  "swimwear"  → swimsuits, bikinis, swim trunks, rash guards
+
+FULL-OUTFIT PHOTOS: If the image shows a complete outfit on a person or mannequin,
+identify the SINGLE item that visually dominates the frame (largest area, most detailed).
+Do NOT default to "top" just because a shirt is present — look at the whole image and
+pick the category of the item being most prominently featured.
+
+Return a JSON object with exactly these fields (no markdown fences):
 {
-  "name": "<short descriptive name, e.g. 'Floral Wrap Dress'>",
-  "category": "<one of: top, bottom, shoes, accessory, outerwear, dress, swimwear>",
-  "colors": ["<hex color 1 e.g. #FF5733>", "<hex color 2 if any>"],
-  "color_names": ["<human color name 1>", "<human color name 2 if any>"],
+  "name": "<concise item name, e.g. 'High-Waist Slim Jeans' or 'Floral Wrap Dress'>",
+  "category": "<exactly one lowercase value from the list above>",
+  "colors": ["<dominant hex color e.g. #1A2B3C>", "<secondary hex if clearly present>"],
+  "color_names": ["<human color name>", "<second color name if any>"],
   "style_tags": ["<tag1>", "<tag2>", "<tag3>"],
   "season_tags": ["<one or more of: Spring, Summer, Fall, Winter, All-Season>"],
-  "brand": "<brand name if visible, else null>",
-  "description": "<2-sentence AI styling description>"
+  "brand": "<brand name if a logo or label is clearly visible, else null>",
+  "description": "<2-sentence styling description of this specific item>"
 }
 
 Rules:
-- category must be exactly one of the enum values listed.
-- colors list must contain valid hex strings with leading #.
-- style_tags: 3–6 descriptive fashion tags (e.g. "casual", "floral", "midi length").
-- season_tags: at least one season.
-- Return ONLY the JSON object, no markdown fences.
+- category MUST be lowercase and exactly one of the seven values defined above.
+- colors: valid 6-digit hex strings with a leading # character.
+- style_tags: 3–6 specific fashion descriptors (e.g. "slim fit", "floral print", "midi length").
+- season_tags: at least one season value.
 ''';
 
     final content = [

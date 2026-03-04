@@ -111,22 +111,40 @@ class WardrobeScreen extends ConsumerWidget {
                 if (items.isEmpty) {
                   return _EmptyWardrobe(profileId: profileId);
                 }
-                return GridView.builder(
-                  padding: const EdgeInsets.all(12),
-                  gridDelegate:
-                      const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3,
-                    mainAxisSpacing: 8,
-                    crossAxisSpacing: 8,
-                    childAspectRatio: 0.75,
-                  ),
-                  itemCount: items.length,
-                  itemBuilder: (ctx, i) => _WardrobeItemCard(
-                    item: items[i],
-                    onTap: () => ctx.push(
-                      AppRoutes.itemDetailPath(profileId, items[i].id),
+                final notifier =
+                    ref.read(wardrobeProvider(profileId).notifier);
+                final hasMore = notifier.hasMore;
+                return CustomScrollView(
+                  slivers: [
+                    SliverPadding(
+                      padding: const EdgeInsets.all(12),
+                      sliver: SliverGrid(
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 3,
+                          mainAxisSpacing: 8,
+                          crossAxisSpacing: 8,
+                          childAspectRatio: 0.75,
+                        ),
+                        delegate: SliverChildBuilderDelegate(
+                          (ctx, i) => _WardrobeItemCard(
+                            item: items[i],
+                            onTap: () => ctx.push(
+                              AppRoutes.itemDetailPath(
+                                  profileId, items[i].id),
+                            ),
+                          ),
+                          childCount: items.length,
+                        ),
+                      ),
                     ),
-                  ),
+                    SliverToBoxAdapter(
+                      child: hasMore
+                          ? _LoadMoreSentinel(
+                              onVisible: () => notifier.loadMore())
+                          : const SizedBox(height: 88), // FAB clearance
+                    ),
+                  ],
                 );
               },
             ),
@@ -225,6 +243,36 @@ class _WardrobeItemCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Invisible pagination sentinel
+// ---------------------------------------------------------------------------
+
+class _LoadMoreSentinel extends StatefulWidget {
+  const _LoadMoreSentinel({required this.onVisible});
+  final VoidCallback onVisible;
+
+  @override
+  State<_LoadMoreSentinel> createState() => _LoadMoreSentinelState();
+}
+
+class _LoadMoreSentinelState extends State<_LoadMoreSentinel> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.onVisible();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 16),
+      child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
     );
   }
 }
