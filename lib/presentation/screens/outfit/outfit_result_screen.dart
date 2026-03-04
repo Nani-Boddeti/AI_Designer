@@ -39,9 +39,33 @@ class OutfitResultScreen extends ConsumerWidget {
       ),
       body: ListView.builder(
         padding: const EdgeInsets.all(16),
-        itemCount: generated.length,
-        itemBuilder: (context, i) =>
-            _OutfitCard(generated: generated[i]),
+        itemCount: generated.length + 1,
+        itemBuilder: (context, i) {
+          if (i == 0) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline,
+                      size: 15,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'AI selected items from each person\'s wardrobe that work together for this occasion.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
+                          ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+          return _OutfitCard(generated: generated[i - 1]);
+        },
       ),
       floatingActionButton: Column(
         mainAxisSize: MainAxisSize.min,

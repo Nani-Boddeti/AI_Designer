@@ -214,8 +214,8 @@ class _StyleSessionScreenState extends ConsumerState<StyleSessionScreen> {
           const SizedBox(height: 8),
           Wrap(
             spacing: 6,
+            runSpacing: 4,
             children: OccasionOptions.all
-                .take(6)
                 .map((o) => ActionChip(
                       label: Text(o),
                       visualDensity: VisualDensity.compact,

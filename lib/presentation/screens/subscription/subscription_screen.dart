@@ -19,20 +19,14 @@ class SubscriptionScreen extends ConsumerStatefulWidget {
       _SubscriptionScreenState();
 }
 
-class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
-    with WidgetsBindingObserver {
+class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
   late final Razorpay _razorpay;
   bool _processingPayment = false;
   String _targetTier = 'pro'; // which tier the user is trying to subscribe to
-  // Sentinel: true from _openCheckout until ANY Razorpay callback fires.
-  // If the app resumes while this is still true, the user dismissed the sheet
-  // without completing (or erroring) the payment — safe to unlock buttons.
-  bool _awaitingCallback = false;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     _razorpay = Razorpay();
     _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, _handlePaymentSuccess);
     _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _handlePaymentError);
@@ -41,28 +35,11 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     _razorpay.clear();
     super.dispose();
   }
 
-  /// Called by the OS when the Flutter activity returns to the foreground.
-  /// If Razorpay's sheet was dismissed via the Android back button it fires
-  /// no event, leaving _awaitingCallback = true. Detect that here and unlock.
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _awaitingCallback) {
-      if (mounted) {
-        setState(() {
-          _awaitingCallback = false;
-          _processingPayment = false;
-        });
-      }
-    }
-  }
-
   Future<void> _handlePaymentSuccess(PaymentSuccessResponse response) async {
-    _awaitingCallback = false;
     if (!mounted) return;
 
     setState(() => _processingPayment = true);
@@ -102,7 +79,6 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
   }
 
   void _handlePaymentError(PaymentFailureResponse response) {
-    _awaitingCallback = false;
     if (!mounted) return;
     // Reset processing flag so buttons re-enable.
     setState(() => _processingPayment = false);
@@ -118,7 +94,6 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
   }
 
   void _handleExternalWallet(ExternalWalletResponse response) {
-    _awaitingCallback = false;
     if (!mounted) return;
     // External wallet selection closes Razorpay sheet — treat as cancelled.
     setState(() => _processingPayment = false);
@@ -141,11 +116,9 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
       return;
     }
 
-    // Lock buttons and arm the dismiss-guard sentinel.
     setState(() {
       _targetTier = targetTier;
       _processingPayment = true;
-      _awaitingCallback = true;
     });
     final tierLabel = targetTier == 'prime' ? 'Prime' : 'Pro';
     final options = {

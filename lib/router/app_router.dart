@@ -18,6 +18,7 @@ import '../presentation/screens/more/contact_us_screen.dart';
 import '../presentation/screens/subscription/subscription_screen.dart';
 import '../presentation/screens/wardrobe/add_item_screen.dart';
 import '../presentation/screens/wardrobe/item_detail_screen.dart';
+import '../presentation/screens/wardrobe/saved_outfits_screen.dart';
 import '../presentation/screens/wardrobe/wardrobe_screen.dart';
 
 // ---------------------------------------------------------------------------
@@ -43,6 +44,7 @@ class AppRoutes {
   static const String calendar = '/calendar';
   static const String subscription = '/subscription';
   static const String contactUs = '/contact-us';
+  static const String savedOutfits = '/saved-outfits/:profileId';
 
   // Helper to build concrete paths.
   static String wardrobePath(String profileId) => '/wardrobe/$profileId';
@@ -52,6 +54,8 @@ class AppRoutes {
       '/wardrobe/$profileId/item/$itemId';
   static String profileEditPath(String profileId) =>
       '/profiles/$profileId/edit';
+  static String savedOutfitsPath(String profileId) =>
+      '/saved-outfits/$profileId';
 }
 
 // ---------------------------------------------------------------------------
@@ -173,6 +177,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.contactUs,
         builder: (_, _) => const ContactUsScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.savedOutfits,
+        builder: (context, state) {
+          final profileId = state.pathParameters['profileId'] ?? '';
+          return SavedOutfitsScreen(profileId: profileId);
+        },
       ),
     ],
   );

@@ -120,8 +120,9 @@ class WardrobeRepository {
       processedBytes = await bgRemovalService.removeBackground(
         Uint8List.fromList(compressed),
       );
-    } catch (_) {
+    } catch (e) {
       // Background removal is optional; proceed without it.
+      onStep?.call('Background removal skipped — saving original');
     }
 
     // Step 3: AI tagging

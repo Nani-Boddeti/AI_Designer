@@ -7,6 +7,7 @@ import 'package:shimmer/shimmer.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../data/models/profile.dart';
 import '../../../data/models/wardrobe_item.dart';
+
 import '../../../router/app_router.dart';
 import '../../providers/wardrobe_provider.dart';
 import '../../providers/profile_provider.dart';
@@ -44,6 +45,12 @@ class WardrobeScreen extends ConsumerWidget {
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.bookmark_outlined),
+            tooltip: 'Saved Outfits',
+            onPressed: () =>
+                context.push(AppRoutes.savedOutfitsPath(profileId)),
+          ),
           if (showProfileSwitcher && profiles.length > 1)
             PopupMenuButton<String>(
               icon: const Icon(Icons.swap_horiz),
