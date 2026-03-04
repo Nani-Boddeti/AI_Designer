@@ -2,7 +2,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/models/outfit.dart';
 import '../../data/models/profile.dart';
+import '../../data/models/wardrobe_item.dart';
 import '../../data/repositories/outfit_repository.dart';
+import '../../data/repositories/wardrobe_repository.dart';
 import '../../domain/usecases/generate_outfits_usecase.dart';
 import '../providers/auth_provider.dart';
 import '../providers/usage_provider.dart';
@@ -15,13 +17,25 @@ class GeneratedOutfitsNotifier extends Notifier<List<GeneratedOutfit>> {
   @override
   List<GeneratedOutfit> build() => [];
 
+  List<Profile> _lastProfiles = [];
+  String _lastOccasion = '';
+  DateTime _lastEventDate = DateTime.now();
+
+  List<Profile> get lastProfiles => _lastProfiles;
+  String get lastOccasion => _lastOccasion;
+  DateTime get lastEventDate => _lastEventDate;
+
   Future<void> generate({
     required List<Profile> profiles,
     required String occasion,
     required DateTime eventDate,
     double? latitude,
     double? longitude,
+    Map<String, List<WardrobeItem>>? pinnedItemsByProfile,
   }) async {
+    _lastProfiles = profiles;
+    _lastOccasion = occasion;
+    _lastEventDate = eventDate;
     final hemisphere =
         ref.read(authProvider).value?.household?.hemisphere ?? 'north';
     final useCase = ref.read(generateOutfitsUseCaseProvider);
@@ -32,6 +46,7 @@ class GeneratedOutfitsNotifier extends Notifier<List<GeneratedOutfit>> {
       hemisphere: hemisphere,
       latitude: latitude,
       longitude: longitude,
+      pinnedItemsByProfile: pinnedItemsByProfile,
     );
     state = results;
     // Increment usage counter — fire-and-forget, never fatal.
@@ -85,3 +100,14 @@ final outfitProvider = AsyncNotifierProvider.autoDispose
     .family<OutfitNotifier, List<Outfit>, String>(
   (arg) => OutfitNotifier(arg),
 );
+
+// ---------------------------------------------------------------------------
+// All wardrobe items for a profile (for manual item selection — limit 200)
+// ---------------------------------------------------------------------------
+
+final allWardrobeItemsProvider = FutureProvider.autoDispose
+    .family<List<WardrobeItem>, String>((ref, profileId) {
+  return ref
+      .read(wardrobeRepositoryProvider)
+      .getItemsForProfile(profileId, limit: 200);
+});

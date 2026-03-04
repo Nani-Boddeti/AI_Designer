@@ -8,6 +8,7 @@ import '../presentation/screens/auth/auth_screen.dart';
 import '../presentation/screens/auth/household_setup_screen.dart';
 import '../presentation/screens/calendar/style_calendar_screen.dart';
 import '../presentation/screens/home/home_screen.dart';
+import '../presentation/screens/outfit/manual_item_selection_screen.dart';
 import '../presentation/screens/outfit/outfit_result_screen.dart';
 import '../presentation/screens/outfit/style_session_screen.dart';
 import '../presentation/screens/outfit/virtual_lineup_screen.dart';
@@ -50,6 +51,7 @@ class AppRoutes {
   static const String privacyPolicy = '/privacy-policy';
   static const String onboarding = '/onboarding';
   static const String savedOutfits = '/saved-outfits/:profileId';
+  static const String manualItemSelection = '/manual-item-selection';
 
   // Helper to build concrete paths.
   static String wardrobePath(String profileId) => '/wardrobe/$profileId';
@@ -205,6 +207,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           final profileId = state.pathParameters['profileId'] ?? '';
           return SavedOutfitsScreen(profileId: profileId);
         },
+      ),
+      GoRoute(
+        path: AppRoutes.manualItemSelection,
+        builder: (_, _) => const ManualItemSelectionScreen(),
       ),
     ],
   );

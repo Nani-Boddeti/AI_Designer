@@ -47,21 +47,12 @@ class GenerateOutfitsUseCase {
     required String hemisphere,
     double? latitude,
     double? longitude,
+    Map<String, List<WardrobeItem>>? pinnedItemsByProfile,
   }) async {
-    // 1. Load wardrobes for all selected profiles in parallel.
-    final wardrobeResults = await Future.wait(
-      profiles.map(
-        (p) => wardrobeRepository
-            .getItemsForProfile(p.id)
-            .then((items) => MapEntry(p.id, items)),
-      ),
-    );
+    // Derive season first so auto-pick profiles can use it.
+    final season = _seasonFromDate(eventDate, hemisphere);
 
-    final wardrobeByProfile = Map<String, List<WardrobeItem>>.fromEntries(
-      wardrobeResults,
-    );
-
-    // 2. Fetch weather if location provided.
+    // Fetch weather if location provided.
     Map<String, dynamic> weatherData = {};
     if (latitude != null && longitude != null) {
       try {
@@ -75,23 +66,28 @@ class GenerateOutfitsUseCase {
       }
     }
 
-    // 3. Pre-filter wardrobes by season + weather before sending to Gemini.
-    //    Reduces token usage by ~85% for a typical family wardrobe.
-    final season = _seasonFromDate(eventDate, hemisphere);
     final tempC = (weatherData['temp_c'] as num?)?.toDouble();
 
-    final wardrobeMapByProfile = wardrobeByProfile.map(
-      (profileId, items) {
+    // Load wardrobes per profile, branching for pinned vs auto-pick.
+    final entries = await Future.wait(
+      profiles.map((p) async {
+        final pinned = pinnedItemsByProfile?[p.id];
+        if (pinned != null && pinned.isNotEmpty) {
+          // User hand-picked — skip season/weather filter and cap.
+          return MapEntry(p.id, pinned.map(_toSlimMap).toList());
+        }
+        // Auto-pick path (unchanged).
+        final items = await wardrobeRepository.getItemsForProfile(p.id);
         final filtered = _filterItems(items, season: season, tempC: tempC);
         final capped = _capItems(filtered);
-        return MapEntry(
-          profileId,
-          capped.map(_toSlimMap).toList(),
-        );
-      },
+        return MapEntry(p.id, capped.map(_toSlimMap).toList());
+      }),
     );
 
-    // 4. Generate outfits via Gemini.
+    final wardrobeMapByProfile =
+        Map<String, List<Map<String, dynamic>>>.fromEntries(entries);
+
+    // Generate outfits via Gemini.
     return outfitRepository.generateOutfits(
       profiles: profiles,
       occasion: occasion,

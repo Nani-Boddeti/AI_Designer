@@ -30,6 +30,11 @@ class OutfitResultScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Outfit Results'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.tune),
+            tooltip: 'Pick items manually',
+            onPressed: () => context.push(AppRoutes.manualItemSelection),
+          ),
           TextButton.icon(
             onPressed: () => context.push(AppRoutes.virtualLineup),
             icon: const Icon(Icons.view_column_outlined),
