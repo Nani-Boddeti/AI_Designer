@@ -20,10 +20,10 @@ dependencies:
   google_generative_ai: ^0.4.6
 
   # State management
-  flutter_riverpod: ^2.6.1
+  flutter_riverpod: ^3.2.1
 
   # Navigation
-  go_router: ^14.8.1
+  go_router: ^17.1.0
 
   # Image handling
   image_picker: ^1.1.2
@@ -44,14 +44,14 @@ dependencies:
   url_launcher: ^6.3.1
 
   # Location
-  geolocator: ^13.0.2
+  geolocator: ^14.0.2
 
   # Permissions
-  permission_handler: ^11.3.1
+  permission_handler: ^12.0.1
 
   # Screenshot / share
   screenshot: ^3.0.0
-  share_plus: ^10.1.4
+  share_plus: ^12.0.1
   path_provider: ^2.1.5
 
   # Utils

@@ -17,7 +17,14 @@ import '../calendar/style_calendar_screen.dart';
 // Bottom navigation index
 // ---------------------------------------------------------------------------
 
-final homeTabIndexProvider = StateProvider<int>((ref) => 0);
+final homeTabIndexProvider =
+    NotifierProvider<_HomeTabNotifier, int>(_HomeTabNotifier.new);
+
+class _HomeTabNotifier extends Notifier<int> {
+  @override
+  int build() => 0;
+  void set(int value) => state = value;
+}
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -41,7 +48,7 @@ class HomeScreen extends ConsumerWidget {
       bottomNavigationBar: NavigationBar(
         selectedIndex: tabIndex,
         onDestinationSelected: (i) =>
-            ref.read(homeTabIndexProvider.notifier).state = i,
+            ref.read(homeTabIndexProvider.notifier).set(i),
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.checkroom_outlined),
@@ -101,7 +108,7 @@ class _WardrobeTab extends ConsumerWidget {
         // Persist the selection.
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (selectedId == null) {
-            ref.read(currentProfileIdProvider.notifier).state = effectiveId;
+            ref.read(currentProfileIdProvider.notifier).set(effectiveId);
           }
         });
 
@@ -110,7 +117,7 @@ class _WardrobeTab extends ConsumerWidget {
           showProfileSwitcher: true,
           profiles: profiles,
           onProfileChanged: (id) =>
-              ref.read(currentProfileIdProvider.notifier).state = id,
+              ref.read(currentProfileIdProvider.notifier).set(id),
         );
       },
     );
@@ -247,7 +254,7 @@ class _MoreTab extends ConsumerWidget {
               subtitle: const Text('Debug builds only'),
               value: bypass,
               onChanged: (v) =>
-                  ref.read(devBypassLimitsProvider.notifier).state = v,
+                  ref.read(devBypassLimitsProvider.notifier).set(v),
             ),
           ],
 

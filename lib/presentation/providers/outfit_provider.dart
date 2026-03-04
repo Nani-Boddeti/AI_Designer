@@ -52,11 +52,13 @@ final generatedOutfitsProvider =
 // Saved outfits (per profile)
 // ---------------------------------------------------------------------------
 
-class OutfitNotifier
-    extends AutoDisposeFamilyAsyncNotifier<List<Outfit>, String> {
+class OutfitNotifier extends AsyncNotifier<List<Outfit>> {
+  OutfitNotifier(this._profileId);
+  final String _profileId;
+
   @override
-  Future<List<Outfit>> build(String arg) async {
-    return ref.watch(outfitRepositoryProvider).getOutfitsForProfile(arg);
+  Future<List<Outfit>> build() async {
+    return ref.watch(outfitRepositoryProvider).getOutfitsForProfile(_profileId);
   }
 
   Future<void> saveOutfit(Outfit outfit) async {
@@ -75,11 +77,11 @@ class OutfitNotifier
 
   Future<void> refresh() async {
     state = const AsyncLoading();
-    state = await AsyncValue.guard(() => build(arg));
+    state = await AsyncValue.guard(() => build());
   }
 }
 
-final outfitProvider = AutoDisposeAsyncNotifierProviderFamily<OutfitNotifier,
-    List<Outfit>, String>(
-  OutfitNotifier.new,
+final outfitProvider = AsyncNotifierProvider.autoDispose
+    .family<OutfitNotifier, List<Outfit>, String>(
+  (arg) => OutfitNotifier(arg),
 );

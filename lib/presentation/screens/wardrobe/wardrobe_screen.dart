@@ -84,7 +84,7 @@ class WardrobeScreen extends ConsumerWidget {
                   selected: filter == null,
                   onSelected: (_) => ref
                       .read(wardrobeCategoryFilterProvider(profileId).notifier)
-                      .state = null,
+                      .set(null),
                 ),
                 ...WardrobeCategory.values.map(
                   (cat) => _FilterChip(
@@ -93,7 +93,7 @@ class WardrobeScreen extends ConsumerWidget {
                     onSelected: (_) => ref
                         .read(wardrobeCategoryFilterProvider(profileId)
                             .notifier)
-                        .state = cat,
+                        .set(cat),
                   ),
                 ),
               ],

@@ -10,7 +10,14 @@ import 'auth_provider.dart';
 // Currently selected profile id (active family member being viewed)
 // ---------------------------------------------------------------------------
 
-final currentProfileIdProvider = StateProvider<String?>((ref) => null);
+final currentProfileIdProvider =
+    NotifierProvider<_CurrentProfileNotifier, String?>(_CurrentProfileNotifier.new);
+
+class _CurrentProfileNotifier extends Notifier<String?> {
+  @override
+  String? build() => null;
+  void set(String? value) => state = value;
+}
 
 // ---------------------------------------------------------------------------
 // Household profiles notifier

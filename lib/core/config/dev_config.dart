@@ -16,4 +16,11 @@ class DevConfig {
 /// When true, all usage limit checks are skipped.
 /// Guards in the UI read this only when [kDebugMode] is true so it has
 /// zero effect in release builds.
-final devBypassLimitsProvider = StateProvider<bool>((ref) => false);
+final devBypassLimitsProvider =
+    NotifierProvider<_DevBypassNotifier, bool>(_DevBypassNotifier.new);
+
+class _DevBypassNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+  void set(bool value) => state = value;
+}

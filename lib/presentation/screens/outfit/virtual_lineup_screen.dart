@@ -36,9 +36,11 @@ class _VirtualLineupScreenState extends ConsumerState<VirtualLineupScreen> {
       final file = File('${dir.path}/lineup_${DateTime.now().millisecondsSinceEpoch}.png');
       await file.writeAsBytes(bytes);
 
-      await Share.shareXFiles(
-        [XFile(file.path)],
-        subject: 'Family Outfit Lineup',
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(file.path)],
+          subject: 'Family Outfit Lineup',
+        ),
       );
     } finally {
       if (mounted) setState(() => _capturing = false);

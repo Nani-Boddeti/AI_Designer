@@ -71,7 +71,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     refreshListenable: authStateListenable,
     redirect: (context, state) {
       final authAsync = ref.read(authProvider);
-      final authValue = authAsync.valueOrNull;
+      final authValue = authAsync.value;
       final isLoading = authAsync.isLoading;
 
       // Never redirect while loading.

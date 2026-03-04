@@ -11,20 +11,32 @@ import '../../data/repositories/wardrobe_repository.dart';
 // ---------------------------------------------------------------------------
 
 final wardrobeCategoryFilterProvider =
-    StateProvider.family<WardrobeCategory?, String>(
-  (ref, profileId) => null, // null = All
+    NotifierProvider.family<_WardrobeCategoryFilter, WardrobeCategory?, String>(
+  (arg) => _WardrobeCategoryFilter(arg),
 );
+
+class _WardrobeCategoryFilter extends Notifier<WardrobeCategory?> {
+  _WardrobeCategoryFilter(this._profileId);
+  final String _profileId; // ignore: unused_field
+
+  @override
+  WardrobeCategory? build() => null; // null = All
+  void set(WardrobeCategory? value) => state = value;
+}
 
 // ---------------------------------------------------------------------------
 // Wardrobe items notifier (per profile)
 // ---------------------------------------------------------------------------
 
-class WardrobeNotifier extends AutoDisposeFamilyAsyncNotifier<List<WardrobeItem>, String> {
+class WardrobeNotifier extends AsyncNotifier<List<WardrobeItem>> {
+  WardrobeNotifier(this._profileId);
+  final String _profileId;
+
   @override
-  Future<List<WardrobeItem>> build(String arg) async {
+  Future<List<WardrobeItem>> build() async {
     return ref
         .watch(wardrobeRepositoryProvider)
-        .getItemsForProfile(arg);
+        .getItemsForProfile(_profileId);
   }
 
   // ---------------------------------------------------------------------------
@@ -38,13 +50,12 @@ class WardrobeNotifier extends AutoDisposeFamilyAsyncNotifier<List<WardrobeItem>
   Future<WardrobeItem> addItem(Uint8List imageBytes, {bool isPrivate = false}) async {
     final previous = state;
     final repo = ref.read(wardrobeRepositoryProvider);
-    final profileId = arg;
 
     _currentStep = 'Starting…';
 
     try {
       final item = await repo.addItem(
-        profileId: profileId,
+        profileId: _profileId,
         imageBytes: imageBytes,
         isPrivate: isPrivate,
         onStep: (step) => _currentStep = step,
@@ -96,13 +107,13 @@ class WardrobeNotifier extends AutoDisposeFamilyAsyncNotifier<List<WardrobeItem>
 
   Future<void> refresh() async {
     state = const AsyncLoading();
-    state = await AsyncValue.guard(() => build(arg));
+    state = await AsyncValue.guard(() => build());
   }
 }
 
-final wardrobeProvider = AutoDisposeAsyncNotifierProviderFamily<
-    WardrobeNotifier, List<WardrobeItem>, String>(
-  WardrobeNotifier.new,
+final wardrobeProvider = AsyncNotifierProvider.autoDispose
+    .family<WardrobeNotifier, List<WardrobeItem>, String>(
+  (arg) => WardrobeNotifier(arg),
 );
 
 /// Filtered view of wardrobe items by category.
