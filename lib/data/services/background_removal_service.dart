@@ -34,7 +34,7 @@ class BackgroundRemovalService {
   final String rembgApiKey;
   final String removeBgApiKey;
 
-  static const _rembgEndpoint = 'https://sdk.photoroom.com/v1/segment';
+  static const _rembgEndpoint = 'https://api.rembg.com/rmbg';
   static const _removeBgEndpoint = 'https://api.remove.bg/v1.0/removebg';
 
   /// Sends [imageBytes] to the configured API and returns the resulting PNG.
@@ -53,9 +53,11 @@ class BackgroundRemovalService {
   Future<Uint8List> _removeWithRembg(Uint8List imageBytes) async {
     final request = http.MultipartRequest('POST', Uri.parse(_rembgEndpoint))
       ..headers['x-api-key'] = rembgApiKey
+      ..fields['format'] = 'png'
+      ..fields['expand'] = 'true'
       ..files.add(
         http.MultipartFile.fromBytes(
-          'image_file',
+          'image',
           imageBytes,
           filename: 'upload.jpg',
         ),
