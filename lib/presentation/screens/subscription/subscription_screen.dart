@@ -124,7 +124,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
     final options = {
       'key': razorpayKey,
       'amount': amountPaisa,
-      'name': 'AI Designer Assist',
+      'name': 'VibeVault',
       'description': '$tierLabel Plan — monthly outfit suggestions',
       'prefill': {'email': userEmail},
       'theme': {'color': '#6750A4'},

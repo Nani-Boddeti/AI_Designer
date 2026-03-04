@@ -25,18 +25,18 @@ Future<void> main() async {
 
   await Hive.initFlutter();
 
-  runApp(const ProviderScope(child: AiDesignerAssistApp()));
+  runApp(const ProviderScope(child: VibeVaultApp()));
 }
 
-class AiDesignerAssistApp extends ConsumerWidget {
-  const AiDesignerAssistApp({super.key});
+class VibeVaultApp extends ConsumerWidget {
+  const VibeVaultApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(appRouterProvider);
 
     return MaterialApp.router(
-      title: 'AI Designer Assist',
+      title: 'VibeVault',
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: ThemeMode.system,

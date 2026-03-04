@@ -24,7 +24,7 @@
         android:maxSdkVersion="32"/>
 
     <application
-        android:label="ai_designer_assist"
+        android:label="VibeVault"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

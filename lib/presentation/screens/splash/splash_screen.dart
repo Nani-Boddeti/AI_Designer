@@ -53,35 +53,28 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    width: 96,
-                    height: 96,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    child: const Icon(
-                      Icons.checkroom_rounded,
-                      size: 56,
-                      color: Colors.white,
-                    ),
+                  Image.asset(
+                    'assets/images/logo.png',
+                    width: 110,
+                    height: 110,
                   ),
                   const SizedBox(height: 24),
                   const Text(
-                    'AI Designer Assist',
+                    'VibeVault',
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 28,
+                      fontSize: 32,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 0.5,
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Family style, perfectly coordinated',
+                    'Your Closet. AI Magic. Perfect for Any Vibe.',
+                    textAlign: TextAlign.center,
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.8),
-                      fontSize: 14,
+                      fontSize: 13,
                     ),
                   ),
                   const SizedBox(height: 48),

@@ -51,9 +51,9 @@ Sign in with a one-tap email link — no password required. Enter your email, re
 | State management | Riverpod 2 (AsyncNotifier) |
 | Navigation | go_router |
 | Backend / Auth / DB | Supabase |
-| AI — tagging | Gemini 1.5 Flash (multimodal) |
-| AI — outfit generation | Gemini 1.5 Flash |
-| Background removal | remove.bg API |
+| AI — tagging | Gemini 2.5 Flash (multimodal) |
+| AI — outfit generation | Gemini 2.5 Flash |
+| Background removal | rembg API (api.rembg.com) |
 | Weather | OpenWeatherMap 5-day forecast |
 | Local cache | Hive |
 | Image loading | cached_network_image |
@@ -93,27 +93,114 @@ lib/
 ```bash
 git clone https://github.com/Nani-Boddeti/AI_Designer.git
 cd AI_Designer
-flutter pub get
+ANDROID_SDK_ROOT="/Users/nani/Library/Android/sdk" flutter pub get
 ```
 
 ### 2. Configure environment
-Create a `.env` file in the project root:
+Create a `.env` file in the project root (for local reference only — keys are never bundled into the APK):
 ```
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_ANON_KEY=your-anon-key
 GEMINI_API_KEY=your-gemini-key
 REMOVE_BG_API_KEY=your-remove-bg-key
+REMBG_API_KEY=your-rembg-key
 OPENWEATHER_API_KEY=your-openweather-key
+RAZORPAY_KEY_ID=your-razorpay-key-id
 ```
 
 ### 3. Set up Supabase
 - Run `supabase_schema.sql` in your Supabase SQL Editor
-- Create two **public** Storage buckets: `wardrobe` and `avatars`
+- Run the migration snippets below if upgrading an existing database
+- Create **public** Storage buckets: `wardrobe-images`, `processed-images`, `avatars`
 - Enable the **Email** provider under Authentication → Providers (Magic Link is included)
 
-### 4. Run
+#### Database migrations (existing DB only)
+```sql
+-- Add gender column to profiles
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS gender TEXT
+  CHECK (gender IN ('male','female','other')) DEFAULT 'other';
+
+-- Fix tier values (rename 'paid' → 'pro')
+UPDATE households SET tier = 'pro' WHERE tier = 'paid';
+ALTER TABLE households DROP CONSTRAINT IF EXISTS households_tier_check,
+  ADD CONSTRAINT households_tier_check CHECK (tier IN ('free','pro','prime'));
+
+-- Private wardrobe items
+ALTER TABLE wardrobe_items ADD COLUMN IF NOT EXISTS is_private BOOLEAN DEFAULT FALSE;
+
+-- RPC for subscription tier update
+CREATE OR REPLACE FUNCTION update_household_tier(p_tier TEXT, p_expires_at TIMESTAMPTZ)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  IF p_tier NOT IN ('pro', 'prime', 'free') THEN
+    RAISE EXCEPTION 'Invalid tier: %', p_tier;
+  END IF;
+  UPDATE households
+  SET tier = p_tier, tier_expires_at = p_expires_at
+  WHERE id = current_household_id();
+END;
+$$;
+```
+
+### 4. Run on device / emulator
 ```bash
-flutter run
+ANDROID_SDK_ROOT="/Users/nani/Library/Android/sdk" flutter run \
+  --dart-define=SUPABASE_URL="your-url" \
+  --dart-define=SUPABASE_ANON_KEY="your-anon-key" \
+  --dart-define=GEMINI_API_KEY="your-gemini-key" \
+  --dart-define=REMOVE_BG_API_KEY="your-remove-bg-key" \
+  --dart-define=REMBG_API_KEY="your-rembg-key" \
+  --dart-define=OPENWEATHER_API_KEY="your-openweather-key" \
+  --dart-define=RAZORPAY_KEY_ID="your-razorpay-key"
+```
+
+---
+
+## Commands Reference
+
+All Flutter commands require `ANDROID_SDK_ROOT` to be set. Use the convenience script for builds — it injects all API keys automatically.
+
+### Install / update dependencies
+```bash
+ANDROID_SDK_ROOT="/Users/nani/Library/Android/sdk" flutter pub get
+```
+
+### Run on connected device or emulator
+```bash
+ANDROID_SDK_ROOT="/Users/nani/Library/Android/sdk" flutter run \
+  --dart-define=SUPABASE_URL="..." \
+  --dart-define=SUPABASE_ANON_KEY="..." \
+  --dart-define=GEMINI_API_KEY="..." \
+  --dart-define=REMOVE_BG_API_KEY="..." \
+  --dart-define=REMBG_API_KEY="..." \
+  --dart-define=OPENWEATHER_API_KEY="..." \
+  --dart-define=RAZORPAY_KEY_ID="..."
+```
+
+### Build APK (recommended — reads keys from build_apk.sh)
+```bash
+# Debug build
+./build_apk.sh debug
+
+# Release build
+./build_apk.sh release
+```
+
+Output: `build/app/outputs/flutter-apk/app-debug.apk` or `app-release.apk`
+
+### Static analysis (must pass clean before any PR)
+```bash
+ANDROID_SDK_ROOT="/Users/nani/Library/Android/sdk" flutter analyze
+```
+
+### Run all tests
+```bash
+ANDROID_SDK_ROOT="/Users/nani/Library/Android/sdk" flutter test
+```
+
+### Run a single test file
+```bash
+ANDROID_SDK_ROOT="/Users/nani/Library/Android/sdk" flutter test test/path/to/test.dart
 ```
 
 ---

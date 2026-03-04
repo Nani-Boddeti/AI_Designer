@@ -115,23 +115,27 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.checkroom_rounded,
-                        size: 48, color: Colors.white),
+                    Image.asset(
+                      'assets/images/logo.png',
+                      width: 64,
+                      height: 64,
+                    ),
                     const SizedBox(height: 12),
                     const Text(
-                      'AI Designer Assist',
+                      'VibeVault',
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: 22,
+                        fontSize: 24,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Family style, powered by AI',
+                      'Your Closet. AI Magic. Perfect for Any Vibe.',
+                      textAlign: TextAlign.center,
                       style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.85),
-                        fontSize: 13,
+                        fontSize: 11,
                       ),
                     ),
                   ],

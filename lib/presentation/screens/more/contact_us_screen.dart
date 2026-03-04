@@ -6,8 +6,8 @@ import '../../../core/constants/app_constants.dart';
 class ContactUsScreen extends StatelessWidget {
   const ContactUsScreen({super.key});
 
-  static const _supportEmail = 'support@aidesignerassist.com';
-  static const _feedbackEmail = 'feedback@aidesignerassist.com';
+  static const _supportEmail = 'support@vibevault.app';
+  static const _feedbackEmail = 'feedback@vibevault.app';
 
   @override
   Widget build(BuildContext context) {

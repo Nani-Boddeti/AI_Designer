@@ -32,6 +32,12 @@ class _StyleSessionScreenState extends ConsumerState<StyleSessionScreen> {
   bool _generating = false;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _fetchWeather());
+  }
+
+  @override
   void dispose() {
     _occasionCtrl.dispose();
     super.dispose();
