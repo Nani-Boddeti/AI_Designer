@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/config/dev_config.dart';
+import '../../../core/widgets/vault_logo.dart';
 import '../../../router/app_router.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/profile_provider.dart';
@@ -85,6 +86,16 @@ class _WardrobeTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Reset selected profile whenever the logged-in user changes (sign-out/sign-in).
+    // This prevents landing on another family member's wardrobe after re-login.
+    ref.listen<AsyncValue<AuthState>>(authProvider, (previous, next) {
+      final prevUserId = previous?.value?.user?.id;
+      final nextUserId = next.value?.user?.id;
+      if (prevUserId != nextUserId && nextUserId != null) {
+        ref.read(currentProfileIdProvider.notifier).set(null);
+      }
+    });
+
     final profilesAsync = ref.watch(profilesProvider);
     final selectedId = ref.watch(currentProfileIdProvider);
     // Prefer the logged-in user's own profile as the default selection.
@@ -166,7 +177,9 @@ class _MoreTab extends ConsumerWidget {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('More')),
+      appBar: AppBar(
+        title: const VaultLogo(size: 28, variant: VaultLogoVariant.adaptive),
+      ),
       body: ListView(
         children: [
           const SizedBox(height: 8),

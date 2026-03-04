@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/vault_logo.dart';
 import '../../providers/auth_provider.dart';
 
 class AuthScreen extends ConsumerStatefulWidget {
@@ -115,11 +116,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Image.asset(
-                      'assets/images/logo.png',
-                      width: 64,
-                      height: 64,
-                    ),
+                    const VaultLogo(size: 72, variant: VaultLogoVariant.hero),
                     const SizedBox(height: 12),
                     const Text(
                       'VibeVault',
