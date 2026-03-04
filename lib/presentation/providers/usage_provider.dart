@@ -39,6 +39,9 @@ class UsageNotifier extends AsyncNotifier<UsageState> {
 
     // Use effective tier: expired subscriptions fall back to 'free'.
     final effectiveTier = household.isSubscribed ? household.tier : 'free';
+    // Guard: while profilesProvider is loading, profiles is [].
+    // TierCalculator with empty list returns the floor (50/200), which is
+    // correct — the notifier rebuilds once the real list arrives.
     final limit = TierCalculator.monthlyLimit(effectiveTier, profiles);
 
     final yearMonth = _currentYearMonth();

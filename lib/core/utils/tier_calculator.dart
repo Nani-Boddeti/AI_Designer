@@ -1,30 +1,47 @@
+import 'dart:math' show max;
+
 import '../constants/app_constants.dart';
 import '../../data/models/profile.dart';
 
 /// Pure static utility — no Flutter/Riverpod imports.
-/// Returns flat monthly limits and fixed prices for the household's tier.
+///
+/// Monthly limits are calculated per-member (gender-aware), then floored at
+/// the tier minimums so a single-person household always gets at least:
+///   Pro  → 50 suggestions / ₹250
+///   Prime → 200 suggestions / ₹1000
 class TierCalculator {
   TierCalculator._();
 
-  /// Monthly outfit-generation limit for a household based on its tier.
+  /// Monthly outfit-generation limit for a household.
   ///
-  /// - free  → 15  (shared household pool)
-  /// - pro   → 50  (flat, household-wide)
-  /// - prime → 200 (flat, household-wide)
-  ///
-  /// The [profiles] parameter is accepted for API compatibility but is
-  /// no longer used in the calculation (limits are flat, not per-member).
+  /// - free  → 15 (flat household pool)
+  /// - pro   → max(Σ per-member, 50)
+  /// - prime → max(Σ per-member, 200)
   static int monthlyLimit(String tier, List<Profile> profiles) {
-    if (tier == 'prime') return TierLimits.primeHouseholdLimit;
-    if (tier == 'pro') return TierLimits.proHouseholdLimit;
+    if (tier == 'prime') {
+      final raw = _sum(profiles, TierLimits.primePerFemale, TierLimits.primePerMale);
+      return max(raw, TierLimits.primeMinSuggestions);
+    }
+    if (tier == 'pro') {
+      final raw = _sum(profiles, TierLimits.proPerFemale, TierLimits.proPerMale);
+      return max(raw, TierLimits.proMinSuggestions);
+    }
     return TierLimits.freeHouseholdLimit;
   }
 
-  /// Total price in paisa for subscribing to [tier].
-  /// Returns 0 for free tier.
+  /// Total price in paisa. Returns 0 for free.
+  /// Floored at ₹250 (pro) and ₹1000 (prime).
   static int pricePaisa(String tier, List<Profile> profiles) {
-    if (tier == 'prime') return TierLimits.primePricePaisa;
-    if (tier == 'pro') return TierLimits.proPricePaisa;
-    return 0;
+    if (tier == 'free') return 0;
+    final raw = monthlyLimit(tier, profiles) * TierLimits.pricePerSuggestionPaisa;
+    if (tier == 'prime') return max(raw, TierLimits.primeMinPaisa);
+    if (tier == 'pro')   return max(raw, TierLimits.proMinPaisa);
+    return raw;
   }
+
+  static int _sum(List<Profile> profiles, int female, int other) =>
+      profiles.fold(
+        0,
+        (s, p) => s + (p.gender == Gender.female ? female : other),
+      );
 }

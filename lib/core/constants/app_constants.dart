@@ -272,14 +272,23 @@ enum Gender {
 class TierLimits {
   TierLimits._();
 
-  /// Flat monthly limits — shared household pool, not per-member.
-  static const int freeHouseholdLimit  = 15;
-  static const int proHouseholdLimit   = 50;
-  static const int primeHouseholdLimit = 200;
+  // Free tier — flat household pool.
+  static const int freeHouseholdLimit = 15;
 
-  /// Fixed prices in paisa (1 ₹ = 100 paisa).
-  static const int proPricePaisa   = 25000;  // ₹250/month
-  static const int primePricePaisa = 100000; // ₹1000/month
+  // Dynamic per-member limits (gender-based).
+  static const int proPerMale    = 10;  // also 'other'
+  static const int proPerFemale  = 15;
+  static const int primePerMale  = 50;
+  static const int primePerFemale = 55;
+
+  // Minimum suggestion floors — the per-member sum can't go below these.
+  static const int proMinSuggestions   = 50;
+  static const int primeMinSuggestions = 200;
+
+  // Pricing: ₹5 per suggestion; paisa floors to guarantee minimum revenue.
+  static const int pricePerSuggestionPaisa = 500;   // ₹5
+  static const int proMinPaisa             = 25000;  // ₹250 floor
+  static const int primeMinPaisa           = 100000; // ₹1000 floor
 }
 
 // ---------------------------------------------------------------------------

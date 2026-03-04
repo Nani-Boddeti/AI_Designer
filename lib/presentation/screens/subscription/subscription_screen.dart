@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/utils/tier_calculator.dart';
 import '../../../data/models/household.dart';
 import '../../../data/models/profile.dart';
 import '../../../data/services/supabase_service.dart';
@@ -201,11 +202,11 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
             ? 'Pro Plan — Active'
             : 'Free Plan';
 
-    // Flat limits and fixed prices.
-    const proLimit = TierLimits.proHouseholdLimit;
-    const primeLimit = TierLimits.primeHouseholdLimit;
-    const proPaisa = TierLimits.proPricePaisa;
-    const primePaisa = TierLimits.primePricePaisa;
+    // Dynamic per-member limits (floored at 50 / 200).
+    final proLimit = TierCalculator.monthlyLimit('pro', profiles);
+    final primeLimit = TierCalculator.monthlyLimit('prime', profiles);
+    final proPaisa = TierCalculator.pricePaisa('pro', profiles);
+    final primePaisa = TierCalculator.pricePaisa('prime', profiles);
 
     // Format price as ₹X
     String fmt(int paisa) => '₹${paisa ~/ 100}';
@@ -293,7 +294,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
           if (profiles.isNotEmpty) ...[
             const SizedBox(height: 4),
             Text(
-              '${profiles.length} member${profiles.length == 1 ? '' : 's'} in your household.',
+              'Calculated for ${profiles.length} member${profiles.length == 1 ? '' : 's'} · scales with family size.',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                   ),
@@ -306,7 +307,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
             tierName: 'Pro',
             limit: proLimit,
             priceLabel: '${fmt(proPaisa)}/month',
-            priceSub: '$proLimit suggestions/month',
+            priceSub: '₹5/suggestion · min 50/month',
             benefits: const [
               'Weather-based outfit matching',
               'AI seasonal wardrobe filtering',
@@ -326,7 +327,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
             tierName: 'Prime',
             limit: primeLimit,
             priceLabel: '${fmt(primePaisa)}/month',
-            priceSub: '$primeLimit suggestions/month',
+            priceSub: '₹5/suggestion · min 200/month',
             benefits: const [
               'Everything in Pro',
               '5× more suggestions per member',
