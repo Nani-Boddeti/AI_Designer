@@ -37,14 +37,9 @@ class UsageNotifier extends AsyncNotifier<UsageState> {
     final household = authState?.household;
     if (household == null) return const UsageState();
 
-    final tier = household.tier;
-    // Guard: while profilesProvider is still loading its value is [].
-    // TierCalculator._sum([]) == 0 which makes canGenerate false for paid
-    // users. Fall back to freeHouseholdLimit until the real list arrives;
-    // the notifier will rebuild automatically once profilesProvider resolves.
-    final limit = profiles.isEmpty
-        ? TierLimits.freeHouseholdLimit
-        : TierCalculator.monthlyLimit(tier, profiles);
+    // Use effective tier: expired subscriptions fall back to 'free'.
+    final effectiveTier = household.isSubscribed ? household.tier : 'free';
+    final limit = TierCalculator.monthlyLimit(effectiveTier, profiles);
 
     final yearMonth = _currentYearMonth();
     final count = await ref

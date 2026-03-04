@@ -21,6 +21,7 @@ class AddItemScreen extends ConsumerStatefulWidget {
 class _AddItemScreenState extends ConsumerState<AddItemScreen> {
   Uint8List? _imageBytes;
   bool _isProcessing = false;
+  bool _isPrivate = false;
   String _step = '';
   String? _errorMessage;
   WardrobeItem? _result;
@@ -57,7 +58,7 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
       // For simplicity, we trigger the pipeline and update step from the notifier.
       _startStepPolling();
 
-      final item = await notifier.addItem(_imageBytes!);
+      final item = await notifier.addItem(_imageBytes!, isPrivate: _isPrivate);
 
       setState(() {
         _result = item;
@@ -164,7 +165,16 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
                 ],
               ),
               if (_imageBytes != null) ...[
-                const SizedBox(height: 16),
+                const SizedBox(height: 8),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  secondary: const Icon(Icons.lock_outline),
+                  title: const Text('Private item'),
+                  subtitle: const Text('Hide from other household members'),
+                  value: _isPrivate,
+                  onChanged: (v) => setState(() => _isPrivate = v),
+                ),
+                const SizedBox(height: 8),
                 FilledButton.icon(
                   onPressed: _processAndSave,
                   icon: const Icon(Icons.auto_awesome),

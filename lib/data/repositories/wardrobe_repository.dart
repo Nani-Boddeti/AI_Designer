@@ -99,6 +99,7 @@ class WardrobeRepository {
   Future<WardrobeItem> addItem({
     required String profileId,
     required Uint8List imageBytes,
+    bool isPrivate = false,
     void Function(String step)? onStep,
   }) async {
     final itemId = const Uuid().v4();
@@ -171,6 +172,7 @@ class WardrobeRepository {
       if (processedImageUrl != null) 'processed_image_url': processedImageUrl,
       if (tags['brand'] != null) 'brand': tags['brand'],
       if (tags['description'] != null) 'ai_description': tags['description'],
+      'is_private': isPrivate,
     };
 
     final data = await supabaseService.client

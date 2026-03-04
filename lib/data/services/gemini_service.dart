@@ -27,7 +27,7 @@ final geminiServiceProvider = Provider<GeminiService>((ref) {
 class GeminiService {
   GeminiService(String apiKey)
       : _model = GenerativeModel(
-          model: 'gemini-2.0-flash',
+          model: 'gemini-2.5-flash',
           apiKey: apiKey,
           generationConfig: GenerationConfig(
             responseMimeType: 'application/json',
@@ -228,7 +228,8 @@ Return ONLY the JSON array, no markdown fences.
       final clean = text.replaceAll(RegExp(r'```(?:json)?'), '').trim();
       final decoded = jsonDecode(clean);
       if (decoded is List) {
-        return decoded.cast<Map<String, dynamic>>();
+        // Eager filter — avoids lazy cast throwing outside the try/catch.
+        return decoded.whereType<Map<String, dynamic>>().toList();
       }
     } catch (_) {}
     return [];

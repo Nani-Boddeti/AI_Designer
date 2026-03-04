@@ -35,7 +35,7 @@ class WardrobeNotifier extends AutoDisposeFamilyAsyncNotifier<List<WardrobeItem>
   String _currentStep = '';
   String get currentStep => _currentStep;
 
-  Future<WardrobeItem> addItem(Uint8List imageBytes) async {
+  Future<WardrobeItem> addItem(Uint8List imageBytes, {bool isPrivate = false}) async {
     final previous = state;
     final repo = ref.read(wardrobeRepositoryProvider);
     final profileId = arg;
@@ -46,6 +46,7 @@ class WardrobeNotifier extends AutoDisposeFamilyAsyncNotifier<List<WardrobeItem>
       final item = await repo.addItem(
         profileId: profileId,
         imageBytes: imageBytes,
+        isPrivate: isPrivate,
         onStep: (step) => _currentStep = step,
       );
       state = AsyncData<List<WardrobeItem>>([item, ...(state.value ?? <WardrobeItem>[])]);

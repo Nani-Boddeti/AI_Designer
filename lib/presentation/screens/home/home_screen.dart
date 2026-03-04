@@ -80,6 +80,8 @@ class _WardrobeTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final profilesAsync = ref.watch(profilesProvider);
     final selectedId = ref.watch(currentProfileIdProvider);
+    // Prefer the logged-in user's own profile as the default selection.
+    final loggedInProfileId = ref.watch(authProvider).value?.profile?.id;
 
     return profilesAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
@@ -89,17 +91,17 @@ class _WardrobeTab extends ConsumerWidget {
           return const _EmptyProfiles();
         }
 
-        // Auto-select first profile if none selected.
-        final effectiveId = selectedId ??
-            (profiles.isNotEmpty ? profiles.first.id : null);
+        // Auto-select: prefer logged-in user's profile, then first profile.
+        final defaultId = loggedInProfileId != null &&
+                profiles.any((p) => p.id == loggedInProfileId)
+            ? loggedInProfileId
+            : profiles.first.id;
+        final effectiveId = selectedId ?? defaultId;
 
-        if (effectiveId == null) return const _EmptyProfiles();
-
-        // Ensure the selection is set.
+        // Persist the selection.
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (selectedId == null) {
-            ref.read(currentProfileIdProvider.notifier).state =
-                profiles.first.id;
+            ref.read(currentProfileIdProvider.notifier).state = effectiveId;
           }
         });
 
@@ -162,31 +164,32 @@ class _MoreTab extends ConsumerWidget {
         children: [
           const SizedBox(height: 8),
 
-          // Subscription / usage card
-          usageAsync.when(
-            loading: () => const SizedBox.shrink(),
-            error: (_, _) => const SizedBox.shrink(),
-            data: (usage) {
-              final h = authState?.household;
-              final label = h?.isPrimeActive == true
-                  ? 'Prime Plan'
-                  : h?.isProActive == true
-                      ? 'Pro Plan'
-                      : 'Free Plan';
-              final isSubscribed = h?.isSubscribed ?? false;
-              return ListTile(
-                leading: Icon(
-                  Icons.workspace_premium_outlined,
-                  color: isSubscribed ? colorScheme.primary : null,
-                ),
-                title: Text(label),
-                subtitle:
-                    Text('${usage.count} / ${usage.limit} used this month'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => context.push(AppRoutes.subscription),
-              );
-            },
-          ),
+          // Subscription / usage card — always visible, usage fills in when ready
+          Builder(builder: (context) {
+            final h = authState?.household;
+            final label = h?.isPrimeActive == true
+                ? 'Prime Plan'
+                : h?.isProActive == true
+                    ? 'Pro Plan'
+                    : 'Free Plan';
+            final isSubscribed = h?.isSubscribed ?? false;
+            final subtitle = usageAsync.when(
+              loading: () => 'Loading usage…',
+              error: (e, _) => 'Tap to manage subscription',
+              data: (usage) =>
+                  '${usage.count} / ${usage.limit} used this month',
+            );
+            return ListTile(
+              leading: Icon(
+                Icons.workspace_premium_outlined,
+                color: isSubscribed ? colorScheme.primary : null,
+              ),
+              title: Text(label),
+              subtitle: Text(subtitle),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push(AppRoutes.subscription),
+            );
+          }),
           const Divider(),
 
           _MoreTile(
@@ -206,6 +209,12 @@ class _MoreTab extends ConsumerWidget {
             title: 'Gap Filler',
             subtitle: 'AI-recommended purchases',
             onTap: () => context.push(AppRoutes.gapFiller),
+          ),
+          _MoreTile(
+            icon: Icons.contact_support_outlined,
+            title: 'Contact Us',
+            subtitle: 'Support & feedback',
+            onTap: () => context.push(AppRoutes.contactUs),
           ),
           const Divider(),
           if (authState?.household != null)

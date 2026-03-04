@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
 
 import '../../../core/constants/app_constants.dart';
-import '../../../core/utils/tier_calculator.dart';
 import '../../../data/models/household.dart';
 import '../../../data/models/profile.dart';
 import '../../../data/services/supabase_service.dart';
@@ -62,25 +61,22 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
   }
 
   Future<void> _handlePaymentSuccess(PaymentSuccessResponse response) async {
-    _awaitingCallback = false; // callback received — dismiss guard no longer needed
-    final household = ref.read(authProvider).value?.household;
-    if (household == null) return;
+    _awaitingCallback = false;
+    if (!mounted) return;
 
     setState(() => _processingPayment = true);
     try {
-      // NOTE: Production apps should verify the payment via a Supabase Edge
-      // Function before updating the tier. This direct client update is fine
-      // for prototyping but should be replaced before going live.
+      // Use RPC (SECURITY DEFINER) to update tier — more reliable than
+      // direct UPDATE which can be silently blocked by RLS edge cases.
       final client = ref.read(supabaseServiceProvider).client;
-      await client.from(SupabaseTables.households).update({
-        'tier': _targetTier,
-        'tier_expires_at': DateTime.now()
+      await client.rpc('update_household_tier', params: {
+        'p_tier': _targetTier,
+        'p_expires_at': DateTime.now()
             .add(const Duration(days: 30))
             .toIso8601String(),
-      }).eq('id', household.id);
+      });
 
-      // Re-fetch household so tier getters reflect the new state.
-      // Also invalidate usage so the limit bar updates to the new tier's cap.
+      // Re-fetch auth + usage so UI reflects the new tier immediately.
       ref.invalidate(authProvider);
       ref.invalidate(usageNotifierProvider);
 
@@ -134,7 +130,17 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
   }
 
   void _openCheckout(String targetTier, int amountPaisa, String userEmail) {
-    // Lock buttons immediately and arm the dismiss-guard sentinel.
+    const razorpayKey = String.fromEnvironment('RAZORPAY_KEY_ID');
+    if (razorpayKey.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Payment not configured. Build with --dart-define=RAZORPAY_KEY_ID.'),
+        ),
+      );
+      return;
+    }
+
+    // Lock buttons and arm the dismiss-guard sentinel.
     setState(() {
       _targetTier = targetTier;
       _processingPayment = true;
@@ -142,7 +148,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
     });
     final tierLabel = targetTier == 'prime' ? 'Prime' : 'Pro';
     final options = {
-      'key': const String.fromEnvironment('RAZORPAY_KEY_ID'),
+      'key': razorpayKey,
       'amount': amountPaisa,
       'name': 'AI Designer Assist',
       'description': '$tierLabel Plan — monthly outfit suggestions',
@@ -160,19 +166,20 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
     final household = authState?.household;
     final colorScheme = Theme.of(context).colorScheme;
 
+    // Build content regardless of usageAsync loading state so buttons stay
+    // visible while usage refreshes after a payment. Fallback to empty usage.
+    final usage = usageAsync.value ?? const UsageState();
+
     return Scaffold(
       appBar: AppBar(title: const Text('Subscription')),
-      body: usageAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
-        data: (usage) => _buildContent(
-          context,
-          usage: usage,
-          household: household,
-          profiles: profiles,
-          userEmail: authState?.user?.email ?? '',
-          colorScheme: colorScheme,
-        ),
+      body: _buildContent(
+        context,
+        usage: usage,
+        usageLoading: usageAsync.isLoading,
+        household: household,
+        profiles: profiles,
+        userEmail: authState?.user?.email ?? '',
+        colorScheme: colorScheme,
       ),
     );
   }
@@ -180,6 +187,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
   Widget _buildContent(
     BuildContext context, {
     required UsageState usage,
+    required bool usageLoading,
     required Household? household,
     required List<Profile> profiles,
     required String userEmail,
@@ -193,10 +201,11 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
             ? 'Pro Plan — Active'
             : 'Free Plan';
 
-    final proLimit = TierCalculator.monthlyLimit('pro', profiles);
-    final primeLimit = TierCalculator.monthlyLimit('prime', profiles);
-    final proPaisa = TierCalculator.pricePaisa('pro', profiles);
-    final primePaisa = TierCalculator.pricePaisa('prime', profiles);
+    // Flat limits and fixed prices.
+    const proLimit = TierLimits.proHouseholdLimit;
+    const primeLimit = TierLimits.primeHouseholdLimit;
+    const proPaisa = TierLimits.proPricePaisa;
+    const primePaisa = TierLimits.primePricePaisa;
 
     // Format price as ₹X
     String fmt(int paisa) => '₹${paisa ~/ 100}';
@@ -234,9 +243,21 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
           const SizedBox(height: AppSizes.paddingLg),
 
           // Usage bar
-          Text(
-            'This Month: ${usage.count} / ${usage.limit} suggestions used',
-            style: Theme.of(context).textTheme.titleMedium,
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'This Month: ${usage.count} / ${usage.limit} suggestions used',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              if (usageLoading)
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+            ],
           ),
           const SizedBox(height: AppSizes.paddingSm),
           ClipRRect(
@@ -272,7 +293,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
           if (profiles.isNotEmpty) ...[
             const SizedBox(height: 4),
             Text(
-              'Prices calculated for ${profiles.length} member${profiles.length == 1 ? '' : 's'}.',
+              '${profiles.length} member${profiles.length == 1 ? '' : 's'} in your household.',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                   ),
@@ -285,7 +306,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
             tierName: 'Pro',
             limit: proLimit,
             priceLabel: '${fmt(proPaisa)}/month',
-            priceSub: '₹5 per suggestion',
+            priceSub: '$proLimit suggestions/month',
             benefits: const [
               'Weather-based outfit matching',
               'AI seasonal wardrobe filtering',
@@ -305,7 +326,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
             tierName: 'Prime',
             limit: primeLimit,
             priceLabel: '${fmt(primePaisa)}/month',
-            priceSub: '₹5 per suggestion',
+            priceSub: '$primeLimit suggestions/month',
             benefits: const [
               'Everything in Pro',
               '5× more suggestions per member',

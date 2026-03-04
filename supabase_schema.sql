@@ -265,3 +265,37 @@ CREATE POLICY "usage_insert" ON household_usage
 
 CREATE POLICY "usage_update" ON household_usage
   FOR UPDATE USING (household_id = current_household_id());
+
+-- ---------------------------------------------------------------------------
+-- Private wardrobe items support
+-- ---------------------------------------------------------------------------
+
+-- Migration: add is_private flag to wardrobe_items
+-- ALTER TABLE wardrobe_items ADD COLUMN IF NOT EXISTS is_private BOOLEAN DEFAULT FALSE;
+
+-- ---------------------------------------------------------------------------
+-- Subscription tier update RPC
+-- ---------------------------------------------------------------------------
+-- Allows the client to safely update the household tier after payment.
+-- SECURITY DEFINER bypasses RLS — validates tier value before updating.
+-- Run this migration in the Supabase SQL Editor.
+
+CREATE OR REPLACE FUNCTION update_household_tier(
+  p_tier       TEXT,
+  p_expires_at TIMESTAMPTZ
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  IF p_tier NOT IN ('pro', 'prime', 'free') THEN
+    RAISE EXCEPTION 'Invalid tier: %', p_tier;
+  END IF;
+
+  UPDATE households
+  SET tier            = p_tier,
+      tier_expires_at = p_expires_at
+  WHERE id = current_household_id();
+END;
+$$;

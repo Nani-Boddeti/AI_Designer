@@ -50,7 +50,7 @@ class ProfileListScreen extends ConsumerWidget {
   void _showAddProfileDialog(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
-      builder: (_) => _AddProfileDialog(ref: ref),
+      builder: (_) => const _AddProfileDialog(),
     );
   }
 }
@@ -134,9 +134,7 @@ class _ProfileCard extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _AddProfileDialog extends ConsumerStatefulWidget {
-  const _AddProfileDialog({required this.ref});
-
-  final WidgetRef ref;
+  const _AddProfileDialog();
 
   @override
   ConsumerState<_AddProfileDialog> createState() => _AddProfileDialogState();

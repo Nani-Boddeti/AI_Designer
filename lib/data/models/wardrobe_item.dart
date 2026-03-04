@@ -16,6 +16,7 @@ class WardrobeItem {
     this.brand,
     this.size,
     this.aiDescription,
+    this.isPrivate = false,
     required this.createdAt,
   });
 
@@ -44,6 +45,10 @@ class WardrobeItem {
 
   /// AI-generated description from Gemini tagging.
   final String? aiDescription;
+
+  /// When true, this item is private to the profile owner and hidden
+  /// from other household members in the wardrobe UI.
+  final bool isPrivate;
 
   final DateTime createdAt;
 
@@ -78,6 +83,7 @@ class WardrobeItem {
       brand: json['brand'] as String?,
       size: json['size'] as String?,
       aiDescription: json['ai_description'] as String?,
+      isPrivate: json['is_private'] as bool? ?? false,
       createdAt: DateTime.parse(json['created_at'] as String),
     );
   }
@@ -97,6 +103,7 @@ class WardrobeItem {
       if (brand != null) 'brand': brand,
       if (size != null) 'size': size,
       if (aiDescription != null) 'ai_description': aiDescription,
+      'is_private': isPrivate,
       'created_at': createdAt.toIso8601String(),
     };
   }
@@ -115,6 +122,7 @@ class WardrobeItem {
     String? brand,
     String? size,
     String? aiDescription,
+    bool? isPrivate,
     DateTime? createdAt,
   }) {
     return WardrobeItem(
@@ -131,6 +139,7 @@ class WardrobeItem {
       brand: brand ?? this.brand,
       size: size ?? this.size,
       aiDescription: aiDescription ?? this.aiDescription,
+      isPrivate: isPrivate ?? this.isPrivate,
       createdAt: createdAt ?? this.createdAt,
     );
   }

@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <application
         android:label="ai_designer_assist"
         android:name="${applicationName}"
@@ -37,9 +38,10 @@
         <!-- Razorpay payment checkout -->
         <activity
             android:name="com.razorpay.CheckoutActivity"
-            android:configChanges="keyboard|keyboardHidden|phoneState|orientation|screenSize"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize"
             android:exported="false"
-            android:theme="@style/Checkout.Theme"/>
+            android:theme="@style/CheckoutTheme"
+            tools:replace="android:configChanges,android:theme"/>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
