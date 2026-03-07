@@ -12,6 +12,7 @@ class Household {
     this.tier = 'free',
     this.tierExpiresAt,
     required this.createdAt,
+    this.dynamicPricing = true,
   });
 
   final String id;
@@ -28,6 +29,10 @@ class Household {
   final DateTime? tierExpiresAt;
 
   final DateTime createdAt;
+
+  /// When true, suggestion limits and prices scale with number of family members.
+  /// When false, flat limits/prices regardless of member count.
+  final bool dynamicPricing;
 
   /// True when tier is 'pro' and the subscription has not yet expired.
   bool get isProActive =>
@@ -51,6 +56,7 @@ class Household {
           ? DateTime.parse(json['tier_expires_at'] as String)
           : null,
       createdAt: DateTime.parse(json['created_at'] as String),
+      dynamicPricing: (json['dynamic_pricing'] as bool?) ?? true,
     );
   }
 
@@ -63,6 +69,7 @@ class Household {
       'tier': tier,
       'tier_expires_at': tierExpiresAt?.toIso8601String(),
       'created_at': createdAt.toIso8601String(),
+      'dynamic_pricing': dynamicPricing,
     };
   }
 
@@ -75,6 +82,7 @@ class Household {
     // Pass null explicitly to clear tierExpiresAt; omit to keep existing value.
     Object? tierExpiresAt = _kSentinel,
     DateTime? createdAt,
+    bool? dynamicPricing,
   }) {
     return Household(
       id: id ?? this.id,
@@ -86,11 +94,12 @@ class Household {
           ? this.tierExpiresAt
           : tierExpiresAt as DateTime?,
       createdAt: createdAt ?? this.createdAt,
+      dynamicPricing: dynamicPricing ?? this.dynamicPricing,
     );
   }
 
   @override
-  String toString() => 'Household(id: $id, name: $name, tier: $tier)';
+  String toString() => 'Household(id: $id, tier: $tier)';
 
   @override
   bool operator ==(Object other) =>

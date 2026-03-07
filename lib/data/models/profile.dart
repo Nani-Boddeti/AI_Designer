@@ -16,6 +16,7 @@ class Profile {
     this.skinTone,
     this.stylePersona = const [],
     this.fitPreferences = const {},
+    this.isAdmin = false,
     required this.createdAt,
   });
 
@@ -37,6 +38,9 @@ class Profile {
   /// Arbitrary fit preference key-value pairs.
   final Map<String, dynamic> fitPreferences;
 
+  /// Whether this profile is the household admin (creator).
+  final bool isAdmin;
+
   final DateTime createdAt;
 
   factory Profile.fromJson(Map<String, dynamic> json) {
@@ -56,6 +60,7 @@ class Profile {
           : [],
       fitPreferences:
           (json['fit_preferences'] as Map<String, dynamic>?) ?? {},
+      isAdmin: (json['is_admin'] as bool?) ?? false,
       createdAt: DateTime.parse(json['created_at'] as String),
     );
   }
@@ -72,6 +77,7 @@ class Profile {
       'skin_tone': skinTone?.value,
       'style_persona': stylePersona,
       'fit_preferences': fitPreferences,
+      'is_admin': isAdmin,
       'created_at': createdAt.toIso8601String(),
     };
   }
@@ -89,6 +95,7 @@ class Profile {
     Object? skinTone = _kSkinToneSentinel,
     List<String>? stylePersona,
     Map<String, dynamic>? fitPreferences,
+    bool? isAdmin,
     DateTime? createdAt,
   }) {
     return Profile(
@@ -104,12 +111,13 @@ class Profile {
           : skinTone as SkinTone?,
       stylePersona: stylePersona ?? this.stylePersona,
       fitPreferences: fitPreferences ?? this.fitPreferences,
+      isAdmin: isAdmin ?? this.isAdmin,
       createdAt: createdAt ?? this.createdAt,
     );
   }
 
   @override
-  String toString() => 'Profile(id: $id, name: $name)';
+  String toString() => 'Profile(id: $id)';
 
   @override
   bool operator ==(Object other) =>

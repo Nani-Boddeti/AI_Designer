@@ -102,27 +102,34 @@ class ProfilesNotifier extends AsyncNotifier<List<Profile>> {
     required List<int> imageBytes,
   }) async {
     final svc = ref.read(supabaseServiceProvider);
-    final path = 'avatars/$profileId/avatar.jpg';
-    final avatarUrl = await svc.uploadFile(
+    final avatarPath = 'avatars/$profileId/avatar.jpg';
+
+    // Upload returns the storage path (buckets are private).
+    await svc.uploadFile(
       bucket: SupabaseBuckets.avatars,
-      path: path,
+      path: avatarPath,
       bytes: imageBytes,
       contentType: 'image/jpeg',
     );
 
-    if (avatarUrl.isEmpty) throw Exception('Avatar upload returned empty URL');
-
-    final data = await svc.client
+    // Store the path (not a URL) in the DB.
+    await svc.client
         .from(SupabaseTables.profiles)
-        .update({'avatar_url': avatarUrl})
-        .eq('id', profileId)
-        .select()
-        .single();
+        .update({'avatar_url': avatarPath})
+        .eq('id', profileId);
 
-    final updated = Profile.fromJson(data);
+    // Sign immediately so the avatar displays without waiting for next refresh.
+    final signedUrl = await svc.createSignedUrl(
+      SupabaseBuckets.avatars,
+      avatarPath,
+    );
+
     final profiles = <Profile>[...(state.value ?? <Profile>[])];
     final idx = profiles.indexWhere((p) => p.id == profileId);
-    if (idx >= 0) profiles[idx] = updated;
+    if (idx >= 0) {
+      profiles[idx] =
+          profiles[idx].copyWith(avatarUrl: signedUrl ?? avatarPath);
+    }
     state = AsyncData<List<Profile>>(profiles);
   }
 

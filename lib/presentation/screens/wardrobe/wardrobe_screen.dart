@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:shimmer/shimmer.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/utils/error_utils.dart';
 import '../../../data/models/profile.dart';
 import '../../../data/models/wardrobe_item.dart';
 
@@ -104,7 +105,7 @@ class WardrobeScreen extends ConsumerWidget {
           Expanded(
             child: wardrobeAsync.when(
               loading: () => _ShimmerGrid(),
-              error: (e, _) => Center(child: Text('Error: $e')),
+              error: (e, _) => Center(child: Text(userFriendlyError(e))),
               data: (_) {
                 final items =
                     ref.watch(filteredWardrobeProvider(profileId));

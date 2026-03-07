@@ -53,7 +53,8 @@ class WardrobeRepository {
         .order('created_at', ascending: false)
         .range(offset, offset + limit - 1);
 
-    return (data as List).map((e) => WardrobeItem.fromJson(e)).toList();
+    final items = (data as List).map((e) => WardrobeItem.fromJson(e)).toList();
+    return _signItemListUrls(items);
   }
 
   Future<WardrobeItem?> getItem(String itemId) async {
@@ -64,7 +65,7 @@ class WardrobeRepository {
         .maybeSingle();
 
     if (data == null) return null;
-    return WardrobeItem.fromJson(data);
+    return _signItemUrls(WardrobeItem.fromJson(data));
   }
 
   Future<WardrobeItem> updateItem(WardrobeItem item) async {
@@ -188,7 +189,7 @@ class WardrobeRepository {
         .select()
         .single();
 
-    return WardrobeItem.fromJson(data);
+    return _signItemUrls(WardrobeItem.fromJson(data));
   }
 
   // ---------------------------------------------------------------------------
@@ -198,5 +199,50 @@ class WardrobeRepository {
   List<String> _toStringList(dynamic value) {
     if (value is List) return value.map((e) => e.toString()).toList();
     return [];
+  }
+
+  /// Signs image URLs for a single [item] (buckets are private).
+  Future<WardrobeItem> _signItemUrls(WardrobeItem item) async {
+    final signedImage = item.imageUrl != null
+        ? await supabaseService.createSignedUrl(
+            SupabaseBuckets.wardrobeImages, item.imageUrl!)
+        : null;
+    final signedProcessed = item.processedImageUrl != null
+        ? await supabaseService.createSignedUrl(
+            SupabaseBuckets.processedImages, item.processedImageUrl!)
+        : null;
+    if (signedImage == null && signedProcessed == null) return item;
+    return item.copyWith(
+      imageUrl: signedImage ?? item.imageUrl,
+      processedImageUrl: signedProcessed ?? item.processedImageUrl,
+    );
+  }
+
+  /// Batch-signs image URLs for a list of items using two batch calls.
+  Future<List<WardrobeItem>> _signItemListUrls(
+      List<WardrobeItem> items) async {
+    if (items.isEmpty) return items;
+
+    final imagePaths =
+        items.where((i) => i.imageUrl != null).map((i) => i.imageUrl!).toList();
+    final processedPaths = items
+        .where((i) => i.processedImageUrl != null)
+        .map((i) => i.processedImageUrl!)
+        .toList();
+
+    final signedImages = await supabaseService.createSignedUrls(
+        SupabaseBuckets.wardrobeImages, imagePaths);
+    final signedProcessed = await supabaseService.createSignedUrls(
+        SupabaseBuckets.processedImages, processedPaths);
+
+    return items.map((item) {
+      final img = item.imageUrl != null
+          ? (signedImages[item.imageUrl!] ?? item.imageUrl)
+          : null;
+      final proc = item.processedImageUrl != null
+          ? (signedProcessed[item.processedImageUrl!] ?? item.processedImageUrl)
+          : null;
+      return item.copyWith(imageUrl: img, processedImageUrl: proc);
+    }).toList();
   }
 }

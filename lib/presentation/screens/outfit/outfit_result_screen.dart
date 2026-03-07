@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/utils/color_harmony.dart';
 import '../../../data/models/wardrobe_item.dart';
 import '../../../router/app_router.dart';
 import '../../providers/outfit_provider.dart';
@@ -42,44 +41,16 @@ class OutfitResultScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: generated.length + 1,
-        itemBuilder: (context, i) {
-          if (i == 0) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Row(
-                children: [
-                  Icon(Icons.info_outline,
-                      size: 15,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      'AI selected items from each person\'s wardrobe that work together for this occasion.',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurfaceVariant,
-                          ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }
-          return _OutfitCard(generated: generated[i - 1]);
-        },
-      ),
+      body: _buildGroupedBody(context, generated),
       floatingActionButton: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          FloatingActionButton.small(
+          FloatingActionButton.extended(
             heroTag: 'save_all',
             onPressed: () => _saveAll(context, ref, generated),
-            child: const Icon(Icons.save_outlined),
+            icon: const Icon(Icons.bookmark_add_outlined),
+            label: const Text('Save All'),
           ),
           const SizedBox(height: 8),
           FloatingActionButton.extended(
@@ -93,6 +64,49 @@ class OutfitResultScreen extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildGroupedBody(
+      BuildContext context, List<GeneratedOutfit> generated) {
+    // Group by profileId preserving insertion order.
+    final grouped = <String, List<GeneratedOutfit>>{};
+    for (final g in generated) {
+      grouped.putIfAbsent(g.outfit.profileId, () => []).add(g);
+    }
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        // Info banner
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Row(
+            children: [
+              Icon(Icons.info_outline,
+                  size: 15,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Two outfit options per person — pick the one you love.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color:
+                            Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        // Profile sections
+        for (final entry in grouped.entries)
+          _ProfileSection(
+            profileName: entry.value.first.profileName,
+            variants: entry.value
+              ..sort((a, b) => a.variantNumber.compareTo(b.variantNumber)),
+          ),
+      ],
     );
   }
 
@@ -115,17 +129,90 @@ class OutfitResultScreen extends ConsumerWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Outfit card per profile
+// Profile section — header + variant cards
 // ---------------------------------------------------------------------------
 
-class _OutfitCard extends ConsumerWidget {
-  const _OutfitCard({required this.generated});
+class _ProfileSection extends StatelessWidget {
+  const _ProfileSection({
+    required this.profileName,
+    required this.variants,
+  });
 
-  final GeneratedOutfit generated;
+  final String profileName;
+  final List<GeneratedOutfit> variants;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final outfit = generated.outfit;
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Profile header
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8, top: 4),
+          child: Row(
+            children: [
+              CircleAvatar(
+                child: Text(profileName.isNotEmpty
+                    ? profileName[0].toUpperCase()
+                    : '?'),
+              ),
+              const SizedBox(width: 10),
+              Text(profileName,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 16)),
+            ],
+          ),
+        ),
+        // One card per variant
+        for (final g in variants)
+          _OutfitCard(
+            generated: g,
+            variantLabel: g.variantNumber == 1 ? 'Option A' : 'Option B',
+          ),
+        const SizedBox(height: 8),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Outfit card — one variant
+// ---------------------------------------------------------------------------
+
+class _OutfitCard extends ConsumerStatefulWidget {
+  const _OutfitCard({
+    required this.generated,
+    required this.variantLabel,
+  });
+
+  final GeneratedOutfit generated;
+  final String variantLabel;
+
+  @override
+  ConsumerState<_OutfitCard> createState() => _OutfitCardState();
+}
+
+class _OutfitCardState extends ConsumerState<_OutfitCard> {
+  bool _saved = false;
+  bool _saving = false;
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    final outfit = widget.generated.outfit;
+    await ref
+        .read(outfitProvider(outfit.profileId).notifier)
+        .saveOutfit(outfit);
+    if (mounted) {
+      setState(() {
+        _saving = false;
+        _saved = true;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final outfit = widget.generated.outfit;
     final profileId = outfit.profileId;
     final wardrobeAsync = ref.watch(wardrobeProvider(profileId));
     final colorScheme = Theme.of(context).colorScheme;
@@ -135,45 +222,25 @@ class _OutfitCard extends ConsumerWidget {
         .where((item) => outfit.itemIds.contains(item.id))
         .toList();
 
-    final harmonyColors = outfitItems
-        .expand((i) => i.colors.map(ColorHarmony.parseHex))
-        .toList();
-    final harmonyScore = ColorHarmony.scoreOutfitHarmony(harmonyColors);
-    final harmonyLabel = ColorHarmony.harmonyLabel(harmonyScore);
-
     return Card(
-      margin: const EdgeInsets.only(bottom: 16),
+      margin: const EdgeInsets.only(bottom: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Header
+          // Header — variant label + match score
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: Row(
               children: [
-                CircleAvatar(
-                  child: Text(generated.profileName.isNotEmpty
-                      ? generated.profileName[0].toUpperCase()
-                      : '?'),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(generated.profileName,
-                          style: const TextStyle(fontWeight: FontWeight.bold)),
-                      Text(outfit.occasion ?? '',
-                          style: const TextStyle(color: Colors.grey)),
-                    ],
-                  ),
-                ),
-                _HarmonyBadge(score: harmonyScore, label: harmonyLabel),
+                Text(widget.variantLabel,
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                const Spacer(),
+                _MatchScorePill(score: widget.generated.harmonyScore),
               ],
             ),
           ),
 
-          // Item images grid
+          // Item images
           if (outfitItems.isNotEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -196,7 +263,7 @@ class _OutfitCard extends ConsumerWidget {
             ),
 
           // Styling note
-          if (generated.stylingNote.isNotEmpty)
+          if (widget.generated.stylingNote.isNotEmpty)
             Padding(
               padding: const EdgeInsets.all(16),
               child: Row(
@@ -207,7 +274,7 @@ class _OutfitCard extends ConsumerWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      generated.stylingNote,
+                      widget.generated.stylingNote,
                       style: const TextStyle(height: 1.5),
                     ),
                   ),
@@ -215,25 +282,29 @@ class _OutfitCard extends ConsumerWidget {
               ),
             ),
 
-          // Save button
+          // Save button — 3 states: default / saving / saved
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: OutlinedButton.icon(
-              onPressed: () => ref
-                  .read(outfitProvider(profileId).notifier)
-                  .saveOutfit(outfit)
-                  .then((_) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                        content: Text(
-                            '${generated.profileName}\'s outfit saved!')),
-                  );
-                }
-              }),
-              icon: const Icon(Icons.bookmark_add_outlined),
-              label: const Text('Save Outfit'),
-            ),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: _saved
+                ? OutlinedButton.icon(
+                    onPressed: null,
+                    icon: const Icon(Icons.bookmark_added),
+                    label: const Text('Saved'),
+                  )
+                : _saving
+                    ? const OutlinedButton(
+                        onPressed: null,
+                        child: SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    : OutlinedButton.icon(
+                        onPressed: _save,
+                        icon: const Icon(Icons.bookmark_add_outlined),
+                        label: const Text('Save Outfit'),
+                      ),
           ),
         ],
       ),
@@ -269,30 +340,31 @@ class _ItemThumbnail extends StatelessWidget {
   }
 }
 
-class _HarmonyBadge extends StatelessWidget {
-  const _HarmonyBadge({required this.score, required this.label});
+class _MatchScorePill extends StatelessWidget {
+  const _MatchScorePill({required this.score});
 
   final double score;
-  final String label;
 
   @override
   Widget build(BuildContext context) {
+    final pct = (score * 100).round();
     final color = score >= 0.7
         ? Colors.green
         : score >= 0.5
-            ? Colors.orange
+            ? Colors.amber
             : Colors.red;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
-        borderRadius: BorderRadius.circular(12),
+        color: color.withValues(alpha: 0.12),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
+        borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
-        label,
-        style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600),
+        '$pct% Match',
+        style: TextStyle(
+            color: color, fontSize: 12, fontWeight: FontWeight.bold),
       ),
     );
   }

@@ -31,7 +31,7 @@ class GeminiService {
           apiKey: apiKey,
           generationConfig: GenerationConfig(
             responseMimeType: 'application/json',
-            temperature: 0.4,
+            temperature: 0.7,
           ),
         );
 
@@ -115,14 +115,16 @@ Rules:
             '${weatherData['description']}'
         : 'No weather data available';
 
-    final profilesJson = profiles.map((p) {
+    // Pseudonymize names — never send real names to third-party AI services.
+    final profilesJson = profiles.asMap().entries.map((entry) {
+      final p = entry.value;
       final wardrobe = wardrobeByProfile[p.id] ?? [];
       return {
         'profile_id': p.id,
-        'profile_name': p.name,
+        'profile_name': 'Member ${entry.key + 1}',
         'age_group': p.ageGroup.displayName,
         'gender': p.gender.displayName,
-        if (p.skinTone != null) 'skin_tone': p.skinTone!.displayName,
+        if (p.skinTone != null) 'complexion': p.skinTone!.displayName,
         'style_personas': p.stylePersona,
         'fit_preferences': p.fitPreferences,
         'wardrobe_items': wardrobe.map((item) => {
@@ -148,20 +150,25 @@ Requirements:
 - Outfits should be visually coordinated across the whole family (complementary or analogous colors).
 - Respect age group, style personas, and fit preferences.
 - Respect gender: suggest styles appropriate and flattering for that gender.
-- If skin_tone is provided, prefer colours that complement that skin tone.
+- If complexion is provided, prefer colours that complement that complexion.
 - If weather data is given, choose weather-appropriate items.
 - Write a short, friendly styling note for each person.
 
-Return a JSON array — one object per family member — with this shape:
+Return a JSON array — TWO objects per family member (variant 1 and variant 2) — with this shape:
 [
   {
     "profile_id": "<id>",
     "profile_name": "<name>",
+    "variant_number": 1,
     "item_ids": ["<wardrobe item id>", ...],
     "styling_note": "<short note>",
     "harmony_score": <0.0-1.0 float>
   }
 ]
+
+Variant 1 = best coordinated pick. Variant 2 = a distinctly different color/silhouette combination.
+Never repeat the same item_id combination between variants for the same profile.
+Total objects = number of profiles × 2.
 
 Return ONLY the JSON array, no markdown fences.
 ''';
@@ -188,7 +195,6 @@ Return ONLY the JSON array, no markdown fences.
 You are a personal stylist. Analyse this wardrobe and identify the most impactful missing items.
 
 PERSON:
-- Name: ${profile.name}
 - Age group: ${profile.ageGroup.displayName}
 - Style personas: ${profile.stylePersona.join(', ')}
 - Fit preferences: ${jsonEncode(profile.fitPreferences)}

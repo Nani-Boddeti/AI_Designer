@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/constants/app_constants.dart';
+import '../../core/utils/error_utils.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../data/services/supabase_service.dart';
 import '../../data/models/household.dart';
@@ -159,6 +161,8 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     required String profileName,
     required String hemisphere,
     required String gender,
+    SkinTone? skinTone,
+    bool dynamicPricing = true,
   }) async {
     // IMPORTANT: Do NOT use AsyncValue.guard here. If it throws, guard would
     // set AsyncError which makes valueOrNull == null, causing the router to
@@ -173,6 +177,8 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         profileName: profileName,
         hemisphere: hemisphere,
         gender: gender,
+        skinTone: skinTone,
+        dynamicPricing: dynamicPricing,
       );
       state = AsyncData(AuthState(
         user: repo.currentUser,
@@ -180,8 +186,12 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         household: result.household,
       ));
     } catch (e) {
-      state = AsyncData(prev.copyWith(isLoading: false, error: e.toString()));
+      state = AsyncData(prev.copyWith(isLoading: false, error: userFriendlyError(e)));
     }
+  }
+
+  Future<void> resendVerificationEmail(String email) async {
+    await ref.read(authRepositoryProvider).resendVerificationEmail(email);
   }
 
   Future<void> deleteAccount() async {
@@ -193,7 +203,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       await ref.read(authRepositoryProvider).deleteAccount();
       state = const AsyncData(AuthState());
     } catch (e) {
-      state = AsyncData(prev.copyWith(isLoading: false, error: e.toString()));
+      state = AsyncData(prev.copyWith(isLoading: false, error: userFriendlyError(e)));
     }
   }
 
@@ -201,6 +211,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     required String inviteCode,
     required String profileName,
     required String gender,
+    SkinTone? skinTone,
   }) async {
     // Same pattern as createHousehold — never AsyncError while authenticated.
     final prev = state.value ?? const AuthState();
@@ -211,6 +222,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         inviteCode: inviteCode,
         profileName: profileName,
         gender: gender,
+        skinTone: skinTone,
       );
       state = AsyncData(AuthState(
         user: repo.currentUser,
@@ -218,7 +230,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         household: result.household,
       ));
     } catch (e) {
-      state = AsyncData(prev.copyWith(isLoading: false, error: e.toString()));
+      state = AsyncData(prev.copyWith(isLoading: false, error: userFriendlyError(e)));
     }
   }
 }

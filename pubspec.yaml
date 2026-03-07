@@ -38,6 +38,7 @@ dependencies:
 
   # Local storage
   hive_flutter: ^1.1.0
+  shared_preferences: ^2.3.5
 
 
   # Deep links

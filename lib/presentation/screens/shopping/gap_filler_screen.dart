@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/utils/error_utils.dart';
 import '../../../core/utils/color_harmony.dart';
 import '../../../core/utils/shopping_links.dart';
 import '../../../data/models/profile.dart';
@@ -35,7 +36,7 @@ class _GapFillerScreenState extends ConsumerState<GapFillerScreen> {
           await ref.read(analyzeGapsUseCaseProvider).execute(_selectedProfile!);
       setState(() => _gaps = results);
     } catch (e) {
-      setState(() => _error = e.toString());
+      setState(() => _error = userFriendlyError(e));
     } finally {
       if (mounted) setState(() => _analyzing = false);
     }
@@ -58,7 +59,7 @@ class _GapFillerScreenState extends ConsumerState<GapFillerScreen> {
       appBar: AppBar(title: const Text('Gap Filler')),
       body: profilesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        error: (e, _) => Center(child: Text(userFriendlyError(e))),
         data: (profiles) {
           if (profiles.isEmpty) {
             return const Center(child: Text('Add family members first.'));

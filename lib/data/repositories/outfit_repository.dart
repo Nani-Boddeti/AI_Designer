@@ -94,6 +94,7 @@ class OutfitRepository {
       final note = raw['styling_note'] as String? ?? '';
       final harmonyScore =
           (raw['harmony_score'] as num?)?.toDouble() ?? 0.75;
+      final variantNumber = (raw['variant_number'] as num?)?.toInt() ?? 1;
 
       final outfit = Outfit(
         id: const Uuid().v4(),
@@ -111,6 +112,7 @@ class OutfitRepository {
         profileName: profileName,
         stylingNote: note,
         harmonyScore: harmonyScore,
+        variantNumber: variantNumber,
       );
     }).toList();
   }
@@ -123,10 +125,13 @@ class GeneratedOutfit {
     required this.profileName,
     required this.stylingNote,
     required this.harmonyScore,
+    this.variantNumber = 1,
   });
 
   final Outfit outfit;
   final String profileName;
   final String stylingNote;
   final double harmonyScore;
+  /// 1-based variant index (1 = Option A, 2 = Option B). Defaults to 1.
+  final int variantNumber;
 }

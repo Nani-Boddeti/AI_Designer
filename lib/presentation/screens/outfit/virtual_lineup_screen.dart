@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:screenshot/screenshot.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../../core/utils/error_utils.dart';
 import '../../../data/models/wardrobe_item.dart';
 import '../../providers/outfit_provider.dart';
 import '../../providers/profile_provider.dart';
@@ -65,7 +66,7 @@ class _VirtualLineupScreenState extends ConsumerState<VirtualLineupScreen> {
       ),
       body: profilesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        error: (e, _) => Center(child: Text(userFriendlyError(e))),
         data: (profiles) {
           if (generated.isEmpty) {
             return const Center(

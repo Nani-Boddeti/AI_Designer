@@ -72,6 +72,44 @@ class CalendarRepository {
         .eq('id', eventId);
   }
 
+  Future<CalendarEvent> assignOutfit(
+      String eventId, String profileId, String outfitId) async {
+    final row = await _service.client
+        .from(SupabaseTables.calendarEvents)
+        .select()
+        .eq('id', eventId)
+        .single();
+    final event = CalendarEvent.fromJson(row);
+    final updated = Map<String, String>.from(event.outfitAssignments)
+      ..[profileId] = outfitId;
+    final data = await _service.client
+        .from(SupabaseTables.calendarEvents)
+        .update({'outfit_assignments': updated})
+        .eq('id', eventId)
+        .select()
+        .single();
+    return CalendarEvent.fromJson(data);
+  }
+
+  Future<CalendarEvent> removeOutfitAssignment(
+      String eventId, String profileId) async {
+    final row = await _service.client
+        .from(SupabaseTables.calendarEvents)
+        .select()
+        .eq('id', eventId)
+        .single();
+    final event = CalendarEvent.fromJson(row);
+    final updated = Map<String, String>.from(event.outfitAssignments)
+      ..remove(profileId);
+    final data = await _service.client
+        .from(SupabaseTables.calendarEvents)
+        .update({'outfit_assignments': updated})
+        .eq('id', eventId)
+        .select()
+        .single();
+    return CalendarEvent.fromJson(data);
+  }
+
   /// Returns events for a specific date range.
   Future<List<CalendarEvent>> getEventsBetween({
     required String householdId,

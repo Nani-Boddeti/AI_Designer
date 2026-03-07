@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../../../core/config/dev_config.dart';
+import '../../../core/utils/error_utils.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../data/models/profile.dart';
 import '../../../data/services/weather_service.dart';
@@ -94,12 +95,15 @@ class _StyleSessionScreenState extends ConsumerState<StyleSessionScreen> {
         // User just denied the dialog — respect the choice, skip weather silently.
         return;
       }
+      // GPS with low accuracy is fast; weather service handles its own
+      // same-day caching so we don't persist coordinates locally.
       final pos = await Geolocator.getCurrentPosition(
           locationSettings:
               const LocationSettings(accuracy: LocationAccuracy.low));
+      final lat = pos.latitude;
+      final lon = pos.longitude;
       final svc = ref.read(weatherServiceProvider);
-      final w = await svc.getWeather(
-          lat: pos.latitude, lon: pos.longitude, date: _selectedDate);
+      final w = await svc.getWeather(lat: lat, lon: lon, date: _selectedDate);
       if (mounted) setState(() => _weather = w);
     } catch (_) {
       // Non-fatal.
@@ -145,19 +149,37 @@ class _StyleSessionScreenState extends ConsumerState<StyleSessionScreen> {
     );
   }
 
-  Future<void> _generateOutfits(List<Profile> allProfiles) async {
+  bool _validate() {
     if (_selectedProfileIds.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Select at least one family member')),
       );
-      return;
+      return false;
     }
     if (_occasionCtrl.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Enter an occasion')),
       );
-      return;
+      return false;
     }
+    return true;
+  }
+
+  Future<void> _goToManualSelect(List<Profile> allProfiles) async {
+    if (!_validate()) return;
+    final selectedProfiles = allProfiles
+        .where((p) => _selectedProfileIds.contains(p.id))
+        .toList();
+    ref.read(generatedOutfitsProvider.notifier).setSessionParams(
+          selectedProfiles,
+          _occasionCtrl.text.trim(),
+          _selectedDate,
+        );
+    if (mounted) context.push(AppRoutes.manualItemSelection);
+  }
+
+  Future<void> _generateOutfits(List<Profile> allProfiles) async {
+    if (!_validate()) return;
 
     // Check usage limit; bypass in debug builds when dev switch is on.
     final bypass = kDebugMode && ref.read(devBypassLimitsProvider);
@@ -191,7 +213,7 @@ class _StyleSessionScreenState extends ConsumerState<StyleSessionScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(content: Text(userFriendlyError(e))),
         );
       }
     } finally {
@@ -205,21 +227,19 @@ class _StyleSessionScreenState extends ConsumerState<StyleSessionScreen> {
 
     final body = profilesAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Error: $e')),
+      error: (e, _) => Center(child: Text(userFriendlyError(e))),
       data: (profiles) => _buildContent(profiles),
     );
 
+    final appBar = AppBar(
+      title: const Text('Style Session'),
+    );
+
     if (widget.embeddedInHome) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Style Session')),
-        body: body,
-      );
+      return Scaffold(appBar: appBar, body: body);
     }
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Style Session')),
-      body: body,
-    );
+    return Scaffold(appBar: appBar, body: body);
   }
 
   Widget _buildContent(List<Profile> profiles) {
@@ -312,6 +332,13 @@ class _StyleSessionScreenState extends ConsumerState<StyleSessionScreen> {
                         strokeWidth: 2, color: Colors.white))
                 : const Icon(Icons.auto_awesome),
             label: Text(_generating ? 'Generating…' : 'Generate Outfits'),
+          ),
+
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _generating ? null : () => _goToManualSelect(profiles),
+            icon: const Icon(Icons.checklist_outlined),
+            label: const Text('Manually Select & Generate'),
           ),
 
           const SizedBox(height: 32),

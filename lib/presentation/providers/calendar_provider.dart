@@ -68,6 +68,27 @@ class CalendarNotifier extends AsyncNotifier<List<CalendarEvent>> {
     }
   }
 
+  Future<void> assignOutfit(
+      String eventId, String profileId, String outfitId) async {
+    final repo = ref.read(calendarRepositoryProvider);
+    final updated = await repo.assignOutfit(eventId, profileId, outfitId);
+    _replaceEvent(updated);
+  }
+
+  Future<void> removeOutfitAssignment(
+      String eventId, String profileId) async {
+    final repo = ref.read(calendarRepositoryProvider);
+    final updated = await repo.removeOutfitAssignment(eventId, profileId);
+    _replaceEvent(updated);
+  }
+
+  void _replaceEvent(CalendarEvent updated) {
+    final events = <CalendarEvent>[...(state.value ?? <CalendarEvent>[])];
+    final idx = events.indexWhere((e) => e.id == updated.id);
+    if (idx >= 0) events[idx] = updated;
+    state = AsyncData<List<CalendarEvent>>(events);
+  }
+
   Future<void> refresh() async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() => build());

@@ -1,10 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/constants/app_constants.dart';
 import '../../data/models/outfit.dart';
 import '../../data/models/profile.dart';
 import '../../data/models/wardrobe_item.dart';
 import '../../data/repositories/outfit_repository.dart';
 import '../../data/repositories/wardrobe_repository.dart';
+import '../../data/services/supabase_service.dart';
 import '../../domain/usecases/generate_outfits_usecase.dart';
 import '../providers/auth_provider.dart';
 import '../providers/usage_provider.dart';
@@ -53,6 +55,16 @@ class GeneratedOutfitsNotifier extends Notifier<List<GeneratedOutfit>> {
     try {
       await ref.read(usageNotifierProvider.notifier).increment();
     } catch (_) {}
+  }
+
+  void setSessionParams(
+    List<Profile> profiles,
+    String occasion,
+    DateTime eventDate,
+  ) {
+    _lastProfiles = profiles;
+    _lastOccasion = occasion;
+    _lastEventDate = eventDate;
   }
 
   void clear() => state = [];
@@ -110,4 +122,34 @@ final allWardrobeItemsProvider = FutureProvider.autoDispose
   return ref
       .read(wardrobeRepositoryProvider)
       .getItemsForProfile(profileId, limit: 200);
+});
+
+// ---------------------------------------------------------------------------
+// Cover image URL for a saved outfit (first item's display image)
+// Used by calendar tile thumbnails.
+// ---------------------------------------------------------------------------
+
+final outfitCoverUrlProvider = FutureProvider.autoDispose
+    .family<String?, ({String profileId, String outfitId})>((ref, args) async {
+  final outfits = await ref.watch(outfitProvider(args.profileId).future);
+  final outfit = outfits.where((o) => o.id == args.outfitId).firstOrNull;
+  if (outfit == null || outfit.itemIds.isEmpty) return null;
+  final svc = ref.watch(supabaseServiceProvider);
+  final row = await svc.client
+      .from(SupabaseTables.wardrobeItems)
+      .select('image_url, processed_image_url')
+      .eq('id', outfit.itemIds.first)
+      .maybeSingle();
+  if (row == null) return null;
+
+  // Prefer processed (transparent bg); fall back to original.
+  final rawPath =
+      (row['processed_image_url'] as String?) ?? (row['image_url'] as String?);
+  if (rawPath == null) return null;
+
+  // Buckets are private — sign the URL before returning.
+  final bucket = row['processed_image_url'] != null
+      ? SupabaseBuckets.processedImages
+      : SupabaseBuckets.wardrobeImages;
+  return svc.createSignedUrl(bucket, rawPath);
 });

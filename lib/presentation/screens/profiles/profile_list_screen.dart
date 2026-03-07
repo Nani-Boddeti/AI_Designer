@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/utils/error_utils.dart';
 import '../../../router/app_router.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../../data/models/profile.dart';
 
@@ -14,6 +16,8 @@ class ProfileListScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profilesAsync = ref.watch(profilesProvider);
+    final currentProfile = ref.watch(authProvider).value?.profile;
+    final isAdmin = currentProfile?.isAdmin ?? false;
 
     return Scaffold(
       appBar: AppBar(
@@ -22,7 +26,7 @@ class ProfileListScreen extends ConsumerWidget {
       ),
       body: profilesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => _ErrorView(error: e.toString()),
+        error: (e, _) => _ErrorView(error: userFriendlyError(e)),
         data: (profiles) => profiles.isEmpty
             ? const _EmptyView()
             : GridView.builder(
@@ -35,15 +39,19 @@ class ProfileListScreen extends ConsumerWidget {
                   childAspectRatio: 0.85,
                 ),
                 itemCount: profiles.length,
-                itemBuilder: (context, i) =>
-                    _ProfileCard(profile: profiles[i]),
+                itemBuilder: (context, i) => _ProfileCard(
+                  profile: profiles[i],
+                  canEdit: isAdmin || profiles[i].id == currentProfile?.id,
+                ),
               ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddProfileDialog(context, ref),
-        icon: const Icon(Icons.person_add_outlined),
-        label: const Text('Add Member'),
-      ),
+      floatingActionButton: isAdmin
+          ? FloatingActionButton.extended(
+              onPressed: () => _showAddProfileDialog(context, ref),
+              icon: const Icon(Icons.person_add_outlined),
+              label: const Text('Add Member'),
+            )
+          : null,
     );
   }
 
@@ -60,9 +68,10 @@ class ProfileListScreen extends ConsumerWidget {
 // ---------------------------------------------------------------------------
 
 class _ProfileCard extends StatelessWidget {
-  const _ProfileCard({required this.profile});
+  const _ProfileCard({required this.profile, required this.canEdit});
 
   final Profile profile;
+  final bool canEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -71,31 +80,51 @@ class _ProfileCard extends StatelessWidget {
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () =>
-            context.push(AppRoutes.profileEditPath(profile.id)),
+        onTap: canEdit
+            ? () => context.push(AppRoutes.profileEditPath(profile.id))
+            : null,
         child: Column(
           children: [
             Expanded(
-              child: Container(
-                color: colorScheme.secondaryContainer,
-                child: profile.avatarUrl != null
-                    ? CachedNetworkImage(
-                        imageUrl: profile.avatarUrl!,
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                      )
-                    : Center(
-                        child: Text(
-                          profile.name.isNotEmpty
-                              ? profile.name[0].toUpperCase()
-                              : '?',
-                          style: TextStyle(
-                            fontSize: 48,
-                            fontWeight: FontWeight.bold,
-                            color: colorScheme.onSecondaryContainer,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Container(
+                    color: colorScheme.secondaryContainer,
+                    child: profile.avatarUrl != null
+                        ? CachedNetworkImage(
+                            imageUrl: profile.avatarUrl!,
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                          )
+                        : Center(
+                            child: Text(
+                              profile.name.isNotEmpty
+                                  ? profile.name[0].toUpperCase()
+                                  : '?',
+                              style: TextStyle(
+                                fontSize: 48,
+                                fontWeight: FontWeight.bold,
+                                color: colorScheme.onSecondaryContainer,
+                              ),
+                            ),
                           ),
-                        ),
+                  ),
+                  if (profile.isAdmin)
+                    Positioned(
+                      top: 6,
+                      right: 6,
+                      child: Chip(
+                        label: const Text('Admin',
+                            style: TextStyle(fontSize: 10)),
+                        backgroundColor: colorScheme.primaryContainer,
+                        labelStyle:
+                            TextStyle(color: colorScheme.onPrimaryContainer),
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
                       ),
+                    ),
+                ],
               ),
             ),
             Padding(
@@ -257,7 +286,7 @@ class _AddProfileDialogState extends ConsumerState<_AddProfileDialog> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString())),
+          SnackBar(content: Text(userFriendlyError(e))),
         );
       }
     } finally {

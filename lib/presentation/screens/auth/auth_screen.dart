@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/error_utils.dart';
 import '../../../core/widgets/vault_logo.dart';
 import '../../providers/auth_provider.dart';
 
@@ -27,6 +28,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
   final _magicEmailCtrl = TextEditingController();
   final _magicFormKey = GlobalKey<FormState>();
   bool _magicLinkSent = false;
+  bool _signedUp = false;
+  String _signedUpEmail = '';
 
   @override
   void initState() {
@@ -58,11 +61,21 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
 
   Future<void> _signUp() async {
     if (!_signUpFormKey.currentState!.validate()) return;
+    final email = _emailCtrl.text.trim();
     await ref.read(authProvider.notifier).signUpWithEmail(
-          email: _emailCtrl.text.trim(),
+          email: email,
           password: _passwordCtrl.text,
         );
-    _checkError();
+    if (!mounted) return;
+    final authState = ref.read(authProvider);
+    if (authState.hasError) {
+      _checkError();
+    } else {
+      setState(() {
+        _signedUp = true;
+        _signedUpEmail = email;
+      });
+    }
   }
 
   Future<void> _sendMagicLink() async {
@@ -83,7 +96,32 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
   void _checkError() {
     if (!mounted) return;
     final authState = ref.read(authProvider);
-    if (authState.hasError) _showError(authState.error.toString());
+    if (!authState.hasError) return;
+    final error = authState.error.toString();
+    if (error.toLowerCase().contains('email not confirmed')) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: const Text('Please confirm your email before signing in.'),
+        action: SnackBarAction(
+          label: 'Resend',
+          onPressed: () => _resendVerification(_emailCtrl.text.trim()),
+        ),
+      ));
+      return;
+    }
+    _showError(error);
+  }
+
+  Future<void> _resendVerification(String email) async {
+    try {
+      await ref.read(authProvider.notifier).resendVerificationEmail(email);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Verification email sent!')),
+        );
+      }
+    } catch (e) {
+      if (mounted) _showError(userFriendlyError(e));
+    }
   }
 
   void _showError(String message) {
@@ -178,6 +216,46 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
     required bool isSignIn,
     required bool isLoading,
   }) {
+    if (!isSignIn && _signedUp) {
+      return Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.mark_email_read_outlined,
+                size: 72, color: Theme.of(context).colorScheme.primary),
+            const SizedBox(height: 24),
+            Text(
+              'Verify your email',
+              style: Theme.of(context).textTheme.headlineSmall,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              "We've sent a link to\n$_signedUpEmail\nTap it to activate your account.",
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.7),
+                  ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 32),
+            TextButton.icon(
+              onPressed: () => _resendVerification(_signedUpEmail),
+              icon: const Icon(Icons.refresh),
+              label: const Text('Resend email'),
+            ),
+            TextButton(
+              onPressed: () => setState(() => _signedUp = false),
+              child: const Text('Back to Sign In'),
+            ),
+          ],
+        ),
+      );
+    }
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Form(
@@ -194,7 +272,9 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
                 prefixIcon: Icon(Icons.email_outlined),
               ),
               validator: (v) =>
-                  v == null || !v.contains('@') ? 'Enter a valid email' : null,
+                  v == null || !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(v.trim())
+                      ? 'Enter a valid email'
+                      : null,
             ),
             const SizedBox(height: 16),
             TextFormField(
@@ -335,7 +415,9 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
                 hintText: 'you@example.com',
               ),
               validator: (v) =>
-                  v == null || !v.contains('@') ? 'Enter a valid email' : null,
+                  v == null || !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(v.trim())
+                      ? 'Enter a valid email'
+                      : null,
             ),
             const SizedBox(height: 24),
 

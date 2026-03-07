@@ -44,17 +44,25 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
 
     setState(() => _processingPayment = true);
     try {
-      // Use RPC (SECURITY DEFINER) to update tier — more reliable than
-      // direct UPDATE which can be silently blocked by RLS edge cases.
-      final client = ref.read(supabaseServiceProvider).client;
-      await client.rpc('update_household_tier', params: {
-        'p_tier': _targetTier,
-        'p_expires_at': DateTime.now()
-            .add(const Duration(days: 30))
-            .toIso8601String(),
-      });
+      final householdId =
+          ref.read(authProvider).value?.household?.id ?? '';
 
-      // Re-fetch auth + usage so UI reflects the new tier immediately.
+      final client = ref.read(supabaseServiceProvider).client;
+      final result = await client.functions.invoke(
+        'verify-razorpay-payment',
+        body: {
+          'payment_id': response.paymentId ?? '',
+          'order_id': response.orderId ?? '',
+          'signature': response.signature ?? '',
+          'tier': _targetTier,
+          'household_id': householdId,
+        },
+      );
+
+      if (result.data?['success'] != true) {
+        throw Exception(result.data?['error'] ?? 'Verification failed');
+      }
+
       ref.invalidate(authProvider);
       ref.invalidate(usageNotifierProvider);
 
@@ -70,7 +78,9 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to activate subscription: $e')),
+          const SnackBar(
+            content: Text('Payment received but activation failed. Contact support.'),
+          ),
         );
       }
     } finally {
@@ -105,31 +115,50 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
     );
   }
 
-  void _openCheckout(String targetTier, int amountPaisa, String userEmail) {
-    const razorpayKey = String.fromEnvironment('RAZORPAY_KEY_ID');
-    if (razorpayKey.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Payment not configured. Build with --dart-define=RAZORPAY_KEY_ID.'),
-        ),
-      );
-      return;
-    }
+  Future<void> _openCheckout(
+      String targetTier, String userEmail) async {
+    final householdId =
+        ref.read(authProvider).value?.household?.id ?? '';
+    if (householdId.isEmpty) return;
 
     setState(() {
       _targetTier = targetTier;
       _processingPayment = true;
     });
-    final tierLabel = targetTier == 'prime' ? 'Prime' : 'Pro';
-    final options = {
-      'key': razorpayKey,
-      'amount': amountPaisa,
-      'name': 'VibeVault',
-      'description': '$tierLabel Plan — monthly outfit suggestions',
-      'prefill': {'email': userEmail},
-      'theme': {'color': '#6750A4'},
-    };
-    _razorpay.open(options);
+
+    try {
+      // Create order server-side — amount and key come from the Edge Function.
+      final client = ref.read(supabaseServiceProvider).client;
+      final result = await client.functions.invoke(
+        'create-razorpay-order',
+        body: {'tier': targetTier, 'household_id': householdId},
+      );
+
+      final data = result.data as Map<String, dynamic>?;
+      if (data == null || data['order_id'] == null) {
+        throw Exception(data?['error'] ?? 'Failed to create order');
+      }
+
+      final tierLabel = targetTier == 'prime' ? 'Prime' : 'Pro';
+      final options = {
+        'key': data['key_id'] as String,
+        'amount': data['amount'] as int,
+        'order_id': data['order_id'] as String,
+        'currency': data['currency'] as String? ?? 'INR',
+        'name': 'VibeVault',
+        'description': '$tierLabel Plan — monthly outfit suggestions',
+        'prefill': {'email': userEmail},
+        'theme': {'color': '#6750A4'},
+      };
+      _razorpay.open(options);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not initiate payment. Please try again.')),
+        );
+        setState(() => _processingPayment = false);
+      }
+    }
   }
 
   @override
@@ -175,11 +204,13 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
             ? 'Pro Plan — Active'
             : 'Free Plan';
 
-    // Dynamic per-member limits (floored at 50 / 200).
-    final proLimit = TierCalculator.monthlyLimit('pro', profiles);
-    final primeLimit = TierCalculator.monthlyLimit('prime', profiles);
-    final proPaisa = TierCalculator.pricePaisa('pro', profiles);
-    final primePaisa = TierCalculator.pricePaisa('prime', profiles);
+    final dynamicPricing = household?.dynamicPricing ?? true;
+
+    // Limits and prices respect the household's dynamicPricing setting.
+    final proLimit = TierCalculator.monthlyLimit('pro', profiles, dynamicPricing: dynamicPricing);
+    final primeLimit = TierCalculator.monthlyLimit('prime', profiles, dynamicPricing: dynamicPricing);
+    final proPaisa = TierCalculator.pricePaisa('pro', profiles, dynamicPricing: dynamicPricing);
+    final primePaisa = TierCalculator.pricePaisa('prime', profiles, dynamicPricing: dynamicPricing);
 
     // Format price as ₹X
     String fmt(int paisa) => '₹${paisa ~/ 100}';
@@ -221,7 +252,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
             children: [
               Expanded(
                 child: Text(
-                  'This Month: ${usage.count} / ${usage.limit} suggestions used',
+                  'Household this month: ${usage.count} / ${usage.limit} suggestions used',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
               ),
@@ -247,7 +278,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
           ),
           const SizedBox(height: AppSizes.paddingSm),
           Text(
-            '${usage.remaining} suggestions remaining',
+            '${usage.remaining} suggestions left for your household',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: colorScheme.onSurfaceVariant,
                 ),
@@ -267,7 +298,9 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
           if (profiles.isNotEmpty) ...[
             const SizedBox(height: 4),
             Text(
-              'Calculated for ${profiles.length} member${profiles.length == 1 ? '' : 's'} · scales with family size.',
+              dynamicPricing
+                  ? 'Shared across your family · scales with ${profiles.length} member${profiles.length == 1 ? '' : 's'}.'
+                  : 'Fixed limits & price shared across your family — doesn\'t change as members join.',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                   ),
@@ -282,6 +315,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
             priceLabel: '${fmt(proPaisa)}/month',
             priceSub: '₹5/suggestion · min 50/month',
             benefits: const [
+              'Up to 50+ outfit suggestions shared across your whole family/month',
               'Weather-based outfit matching',
               'AI seasonal wardrobe filtering',
               'Full wardrobe gap analysis',
@@ -290,7 +324,9 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
             isActive: isProActive,
             isDisabled: isPrimeActive || _processingPayment,
             colorScheme: colorScheme,
-            onSubscribe: () => _openCheckout('pro', proPaisa, userEmail),
+            dynamicPricing: dynamicPricing,
+            profileCount: profiles.length,
+            onSubscribe: () => _openCheckout('pro', userEmail),
           ),
 
           const SizedBox(height: AppSizes.paddingMd),
@@ -302,6 +338,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
             priceLabel: '${fmt(primePaisa)}/month',
             priceSub: '₹5/suggestion · min 200/month',
             benefits: const [
+              'Up to 200+ outfit suggestions shared across your whole family/month',
               'Everything in Pro',
               '5× more suggestions per member',
               'Weather-based outfit matching',
@@ -313,7 +350,9 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
             // or while a payment is in flight.
             isDisabled: isPrimeActive || _processingPayment,
             colorScheme: colorScheme,
-            onSubscribe: () => _openCheckout('prime', primePaisa, userEmail),
+            dynamicPricing: dynamicPricing,
+            profileCount: profiles.length,
+            onSubscribe: () => _openCheckout('prime', userEmail),
             highlight: true,
           ),
 
@@ -344,6 +383,8 @@ class _TierCard extends StatelessWidget {
     required this.isDisabled,
     required this.colorScheme,
     required this.onSubscribe,
+    required this.dynamicPricing,
+    required this.profileCount,
     this.highlight = false,
   });
 
@@ -356,6 +397,8 @@ class _TierCard extends StatelessWidget {
   final bool isDisabled;
   final ColorScheme colorScheme;
   final VoidCallback onSubscribe;
+  final bool dynamicPricing;
+  final int profileCount;
   final bool highlight;
 
   @override
@@ -426,13 +469,42 @@ class _TierCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            '$limit suggestions/month',
+            '$limit suggestions/month shared across your family',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: colorScheme.primary,
                   fontWeight: FontWeight.w600,
                 ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            children: [
+              Chip(
+                padding: EdgeInsets.zero,
+                labelPadding: const EdgeInsets.symmetric(horizontal: 8),
+                visualDensity: VisualDensity.compact,
+                label: Text(
+                  dynamicPricing ? 'Scales with family size' : 'Fixed price',
+                  style: const TextStyle(fontSize: 11),
+                ),
+                avatar: Icon(
+                  dynamicPricing ? Icons.group : Icons.lock_outline,
+                  size: 14,
+                ),
+              ),
+              if (dynamicPricing && profileCount > 0)
+                Chip(
+                  padding: EdgeInsets.zero,
+                  labelPadding: const EdgeInsets.symmetric(horizontal: 8),
+                  visualDensity: VisualDensity.compact,
+                  label: Text(
+                    '$profileCount member${profileCount == 1 ? '' : 's'} → $limit/month',
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
           ...benefits.map(
             (b) => Padding(
               padding: const EdgeInsets.symmetric(vertical: 3),

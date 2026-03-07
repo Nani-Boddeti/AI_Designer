@@ -5,10 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/utils/error_utils.dart';
 import '../../../data/models/wardrobe_item.dart';
 import '../../providers/wardrobe_provider.dart';
+
+const _kAiDisclosureKey = 'ai_image_disclosure_accepted';
 
 class AddItemScreen extends ConsumerStatefulWidget {
   const AddItemScreen({super.key, required this.profileId});
@@ -20,6 +24,7 @@ class AddItemScreen extends ConsumerStatefulWidget {
 }
 
 class _AddItemScreenState extends ConsumerState<AddItemScreen> {
+  static const _maxImageBytes = 10 * 1024 * 1024; // 10 MB
   Uint8List? _imageBytes;
   bool _isProcessing = false;
   bool _isPrivate = false;
@@ -29,7 +34,52 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
   Timer? _stepPollTimer;
   List<String> _selectedSeasons = [];
 
+  /// Shows the AI processing disclosure dialog on the first use.
+  /// Returns false if the user declines, true if already accepted or just accepted.
+  Future<bool> _ensureDisclosure() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_kAiDisclosureKey) == true) return true;
+
+    if (!mounted) return false;
+
+    final accepted = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('AI Image Processing'),
+        content: const SingleChildScrollView(
+          child: Text(
+            'When you add a clothing item, your photo is processed by two '
+            'third-party AI services:\n\n'
+            '• Google Gemini — automatically tags the item\'s category, '
+            'colors, and style.\n\n'
+            '• remove.bg — removes the background for a cleaner wardrobe view.\n\n'
+            'Photos are sent securely and are not stored by these services '
+            'after processing. By continuing you agree to this use.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Decline'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Allow'),
+          ),
+        ],
+      ),
+    );
+
+    if (accepted == true) {
+      await prefs.setBool(_kAiDisclosureKey, true);
+      return true;
+    }
+    return false;
+  }
+
   Future<void> _pickImage(ImageSource source) async {
+    if (!await _ensureDisclosure()) return;
     final granted = await _ensurePermission(source);
     if (!granted) return;
 
@@ -37,11 +87,86 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
     final picked = await picker.pickImage(source: source, imageQuality: 90);
     if (picked == null) return;
     final bytes = await picked.readAsBytes();
+    if (bytes.lengthInBytes > _maxImageBytes) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Image too large (max 10 MB).')),
+        );
+      }
+      return;
+    }
     setState(() {
       _imageBytes = bytes;
       _result = null;
       _errorMessage = null;
     });
+  }
+
+  /// Gallery multi-select: if 1 image → existing single flow; if >1 → batch.
+  Future<void> _pickMultipleImages() async {
+    if (!await _ensureDisclosure()) return;
+    final granted = await _ensurePermission(ImageSource.gallery);
+    if (!granted) return;
+
+    final picker = ImagePicker();
+    final picked = await picker.pickMultiImage(imageQuality: 90);
+    if (picked.isEmpty) return;
+
+    if (picked.length == 1) {
+      final bytes = await picked.first.readAsBytes();
+      setState(() {
+        _imageBytes = bytes;
+        _result = null;
+        _errorMessage = null;
+      });
+      return;
+    }
+
+    await _processBatch(picked);
+  }
+
+  Future<void> _processBatch(List<XFile> files) async {
+    final notifier = ref.read(wardrobeProvider(widget.profileId).notifier);
+    final currentNotifier = ValueNotifier<int>(0);
+    int succeeded = 0;
+
+    if (!mounted) return;
+    // Show non-dismissable progress sheet. Not awaited — driven by ValueNotifier.
+    showModalBottomSheet<void>(
+      context: context,
+      isDismissible: false,
+      enableDrag: false,
+      builder: (_) => _BatchProgressSheet(
+        total: files.length,
+        currentNotifier: currentNotifier,
+      ),
+    );
+
+    try {
+      for (int i = 0; i < files.length; i++) {
+        currentNotifier.value = i + 1;
+        try {
+          final bytes = await files[i].readAsBytes();
+          await notifier.addItem(bytes, isPrivate: false);
+          succeeded++;
+        } catch (_) {
+          // Continue with remaining items.
+        }
+      }
+
+      if (mounted) Navigator.of(context).pop();
+    } finally {
+      currentNotifier.dispose();
+    }
+
+    if (mounted) {
+      final failed = files.length - succeeded;
+      final msg = failed == 0
+          ? '$succeeded item${succeeded == 1 ? '' : 's'} added'
+          : '$succeeded added, $failed failed';
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(msg)));
+    }
   }
 
   /// Returns true if the required permission is granted or limited (partial).
@@ -138,7 +263,7 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
       });
     } catch (e) {
       setState(() {
-        _errorMessage = e.toString();
+        _errorMessage = userFriendlyError(e);
         _isProcessing = false;
       });
     }
@@ -227,7 +352,7 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: OutlinedButton.icon(
-                      onPressed: () => _pickImage(ImageSource.gallery),
+                      onPressed: () => _pickMultipleImages(),
                       icon: const Icon(Icons.photo_library_outlined),
                       label: const Text('Gallery'),
                     ),
@@ -369,7 +494,7 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
               title: const Text('Choose from Gallery'),
               onTap: () {
                 Navigator.of(context).pop();
-                _pickImage(ImageSource.gallery);
+                _pickMultipleImages();
               },
             ),
           ],
@@ -492,6 +617,47 @@ class _ResultCard extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Batch progress bottom sheet
+// ---------------------------------------------------------------------------
+
+class _BatchProgressSheet extends StatelessWidget {
+  const _BatchProgressSheet({
+    required this.total,
+    required this.currentNotifier,
+  });
+
+  final int total;
+  final ValueNotifier<int> currentNotifier;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<int>(
+      valueListenable: currentNotifier,
+      builder: (context, current, _) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 36),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Adding to Wardrobe',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 16),
+              LinearProgressIndicator(
+                value: total > 0 ? current / total : 0,
+              ),
+              const SizedBox(height: 12),
+              Text('Processing $current of $total…'),
+            ],
+          ),
+        );
+      },
     );
   }
 }

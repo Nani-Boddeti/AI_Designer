@@ -58,7 +58,8 @@ class SupabaseService {
     return Profile.fromJson(data);
   }
 
-  /// Returns all profiles that belong to the given household.
+  /// Returns all profiles that belong to the given household,
+  /// with avatar URLs replaced by 1-hour signed URLs.
   Future<List<Profile>> getHouseholdProfiles(String householdId) async {
     final data = await _client
         .from(SupabaseTables.profiles)
@@ -66,7 +67,25 @@ class SupabaseService {
         .eq('household_id', householdId)
         .order('created_at');
 
-    return (data as List).map((e) => Profile.fromJson(e)).toList();
+    final profiles = (data as List).map((e) => Profile.fromJson(e)).toList();
+
+    // Batch-sign avatar URLs (buckets are private).
+    final avatarPaths = profiles
+        .where((p) => p.avatarUrl != null)
+        .map((p) => _normalizePath(p.avatarUrl!, SupabaseBuckets.avatars))
+        .toList();
+
+    if (avatarPaths.isEmpty) return profiles;
+
+    final signedMap =
+        await createSignedUrls(SupabaseBuckets.avatars, avatarPaths);
+
+    return profiles.map((p) {
+      if (p.avatarUrl == null) return p;
+      final path = _normalizePath(p.avatarUrl!, SupabaseBuckets.avatars);
+      final signed = signedMap[path];
+      return signed != null ? p.copyWith(avatarUrl: signed) : p;
+    }).toList();
   }
 
   // ---------------------------------------------------------------------------
@@ -100,7 +119,8 @@ class SupabaseService {
   // Storage helpers
   // ---------------------------------------------------------------------------
 
-  /// Uploads [bytes] to [bucket]/[path] and returns the public URL.
+  /// Uploads [bytes] to [bucket]/[path] and returns the **storage path**
+  /// (not a public URL — buckets are private; use [createSignedUrl] to display).
   Future<String> uploadFile({
     required String bucket,
     required String path,
@@ -112,8 +132,65 @@ class SupabaseService {
           Uint8List.fromList(bytes),
           fileOptions: FileOptions(contentType: contentType, upsert: true),
         );
+    return path;
+  }
 
-    final url = _client.storage.from(bucket).getPublicUrl(path);
-    return url;
+  /// Returns a signed URL for [path] in [bucket], valid for [expiresIn] seconds.
+  /// Returns null on error (best-effort).
+  Future<String?> createSignedUrl(
+    String bucket,
+    String path, {
+    int expiresIn = 3600,
+  }) async {
+    try {
+      return await _client.storage
+          .from(bucket)
+          .createSignedUrl(_normalizePath(path, bucket), expiresIn);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Batch-signs multiple [paths] in [bucket]. Returns a map of path → signed URL.
+  /// Paths not successfully signed are omitted from the result.
+  Future<Map<String, String>> createSignedUrls(
+    String bucket,
+    List<String> paths, {
+    int expiresIn = 3600,
+  }) async {
+    if (paths.isEmpty) return {};
+    try {
+      final normalised = paths.map((p) => _normalizePath(p, bucket)).toList();
+      final results = await _client.storage
+          .from(bucket)
+          .createSignedUrls(normalised, expiresIn);
+      final map = <String, String>{};
+      for (int i = 0; i < results.length; i++) {
+        final r = results[i];
+        if (r.signedUrl.isNotEmpty) {
+          // Key by normalised path (what the API echoes back) AND original
+          // input so callers can look up by either form.
+          map[r.path] = r.signedUrl;
+          map[paths[i]] = r.signedUrl; // original input (may be full URL)
+        }
+      }
+      return map;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Private helpers
+  // ---------------------------------------------------------------------------
+
+  /// Extracts the storage path from either a plain path or a full public URL.
+  /// e.g. `https://.../object/public/wardrobe-images/wardrobe/x/y.jpg`
+  ///      → `wardrobe/x/y.jpg`
+  static String _normalizePath(String urlOrPath, String bucket) {
+    if (!urlOrPath.startsWith('http')) return urlOrPath;
+    final marker = '/object/public/$bucket/';
+    final idx = urlOrPath.indexOf(marker);
+    return idx >= 0 ? urlOrPath.substring(idx + marker.length) : urlOrPath;
   }
 }

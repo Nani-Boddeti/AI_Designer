@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shimmer/shimmer.dart';
 
+import '../../../core/utils/error_utils.dart';
 import '../../../data/models/wardrobe_item.dart';
 import '../../providers/outfit_provider.dart';
 
@@ -69,7 +70,7 @@ class _ManualItemSelectionScreenState
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
+            .showSnackBar(SnackBar(content: Text(userFriendlyError(e))));
       }
     } finally {
       if (mounted) setState(() => _generating = false);
@@ -204,7 +205,7 @@ class _ProfileTab extends ConsumerWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Error: $e'),
+            Text(userFriendlyError(e)),
             const SizedBox(height: 8),
             TextButton(
               onPressed: () =>

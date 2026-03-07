@@ -1,6 +1,9 @@
+import 'dart:math';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
+
 
 import '../models/household.dart';
 import '../models/profile.dart';
@@ -52,56 +55,24 @@ class AuthRepository {
     await _client.auth.signOut();
   }
 
-  /// Deletes all storage files for the user's profiles, then calls the
-  /// `delete_account` RPC which removes DB rows and the auth user.
+  /// Deletes the account via the `delete-account` Edge Function.
+  ///
+  /// The Edge Function runs with service_role credentials so it can:
+  ///  - Delete all storage files before touching the auth user
+  ///  - Delete DB rows via the `delete_account_for_user` RPC
+  ///  - Delete the auth user via the Admin API
+  /// If any step fails the function returns an error and the account
+  /// remains intact — the user can retry.
   Future<void> deleteAccount() async {
     final user = _service.getCurrentUser();
     if (user == null) throw Exception('Not authenticated');
 
-    // Fetch all profiles owned by this auth user.
-    final profileRows = await _client
-        .from(SupabaseTables.profiles)
-        .select('id')
-        .eq('auth_user_id', user.id);
+    final result = await _client.functions.invoke('delete-account');
 
-    for (final row in profileRows as List) {
-      final profileId = row['id'] as String;
-
-      // Delete wardrobe storage files (both buckets, silently ignore errors).
-      for (final bucket in [
-        SupabaseBuckets.wardrobeImages,
-        SupabaseBuckets.processedImages,
-      ]) {
-        try {
-          final files = await _client.storage
-              .from(bucket)
-              .list(path: 'wardrobe/$profileId');
-          for (final folder in files) {
-            final folderFiles = await _client.storage
-                .from(bucket)
-                .list(path: 'wardrobe/$profileId/${folder.name}');
-            final paths = folderFiles
-                .map((f) => 'wardrobe/$profileId/${folder.name}/${f.name}')
-                .toList();
-            if (paths.isNotEmpty) {
-              await _client.storage.from(bucket).remove(paths);
-            }
-          }
-        } catch (_) {
-          // Storage deletion is best-effort — proceed even if it fails.
-        }
-      }
-
-      // Delete avatar file.
-      try {
-        await _client.storage
-            .from(SupabaseBuckets.avatars)
-            .remove(['avatars/$profileId/avatar.jpg']);
-      } catch (_) {}
+    final data = result.data as Map<String, dynamic>?;
+    if (data?['success'] != true) {
+      throw Exception(data?['error'] ?? 'Account deletion failed');
     }
-
-    // Delete DB rows and auth user via RPC.
-    await _client.rpc('delete_account');
   }
 
   Future<bool> signInWithGoogle() async {
@@ -119,6 +90,10 @@ class AuthRepository {
     );
   }
 
+  Future<void> resendVerificationEmail(String email) async {
+    await _client.auth.resend(type: OtpType.signup, email: email);
+  }
+
   User? get currentUser => _service.getCurrentUser();
 
   Stream<AuthState> get authStateChanges => _client.auth.onAuthStateChange;
@@ -133,14 +108,14 @@ class AuthRepository {
     required String profileName,
     required String hemisphere,
     required String gender,
+    SkinTone? skinTone,
+    bool dynamicPricing = true,
   }) async {
     final user = _service.getCurrentUser();
     if (user == null) throw Exception('Not authenticated');
 
     final householdId = const Uuid().v4();
-    // Derive invite code from the household UUID — guaranteed unique since
-    // the UUID is unique. Takes 8 chars from the hex representation.
-    final inviteCode = _inviteCodeFromId(householdId);
+    final inviteCode = _generateInviteCode();
 
     // Step 1: Insert household WITHOUT .select() — the SELECT policy uses
     // current_household_id() which looks up the user's profile. No profile
@@ -153,6 +128,7 @@ class AuthRepository {
           'name': householdName,
           'hemisphere': hemisphere,
           'invite_code': inviteCode,
+          'dynamic_pricing': dynamicPricing,
         });
 
     // Step 2: Insert profile WITHOUT .select() — same reason as household:
@@ -168,6 +144,8 @@ class AuthRepository {
           'gender': gender,
           'style_persona': <String>[],
           'fit_preferences': <String, dynamic>{},
+          'is_admin': true,
+          if (skinTone != null) 'skin_tone': skinTone.value,
         });
 
     // Step 3: Both rows are now committed. current_household_id() works.
@@ -188,6 +166,7 @@ class AuthRepository {
     required String inviteCode,
     required String profileName,
     required String gender,
+    SkinTone? skinTone,
   }) async {
     final user = _service.getCurrentUser();
     if (user == null) throw Exception('Not authenticated');
@@ -208,6 +187,7 @@ class AuthRepository {
           'gender': gender,
           'style_persona': <String>[],
           'fit_preferences': <String, dynamic>{},
+          if (skinTone != null) 'skin_tone': skinTone.value,
         });
 
     // Profile is committed — current_household_id() now works.
@@ -225,9 +205,10 @@ class AuthRepository {
   // Private helpers
   // ---------------------------------------------------------------------------
 
-  /// Derives a unique 8-character invite code from a household UUID.
-  /// Guaranteed unique — one code per household, no collisions possible.
-  String _inviteCodeFromId(String householdId) {
-    return householdId.replaceAll('-', '').substring(0, 8).toUpperCase();
+  /// Generates a cryptographically random 8-character alphanumeric invite code.
+  String _generateInviteCode() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // omit O,0,I,1 — confusing
+    final rng = Random.secure();
+    return List.generate(8, (_) => chars[rng.nextInt(chars.length)]).join();
   }
 }

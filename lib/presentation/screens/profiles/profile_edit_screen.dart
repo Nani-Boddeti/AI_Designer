@@ -2,11 +2,14 @@ import 'dart:typed_data';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+
+import '../../../core/utils/error_utils.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../../data/models/profile.dart';
 
@@ -159,7 +162,7 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(content: Text(userFriendlyError(e))),
         );
       }
     } finally {
@@ -200,7 +203,7 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
+            .showSnackBar(SnackBar(content: Text(userFriendlyError(e))));
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -213,6 +216,22 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
       );
+    }
+
+    // Route-level guard: only admin or the profile owner can edit.
+    final currentProfile = ref.read(authProvider).value?.profile;
+    final canEdit = currentProfile != null &&
+        (currentProfile.isAdmin || currentProfile.id == widget.profileId);
+    if (!canEdit) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Not authorized to edit this profile.')),
+          );
+          Navigator.of(context).pop();
+        }
+      });
+      return const Scaffold(body: SizedBox.shrink());
     }
 
     final colorScheme = Theme.of(context).colorScheme;

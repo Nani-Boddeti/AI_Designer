@@ -5,7 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/config/dev_config.dart';
+import '../../../core/utils/error_utils.dart';
+import '../../../core/constants/app_constants.dart';
 import '../../../core/widgets/vault_logo.dart';
+import '../../../data/services/supabase_service.dart';
 import '../../../router/app_router.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/profile_provider.dart';
@@ -103,7 +106,7 @@ class _WardrobeTab extends ConsumerWidget {
 
     return profilesAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Error: $e')),
+      error: (e, _) => Center(child: Text(userFriendlyError(e))),
       data: (profiles) {
         if (profiles.isEmpty) {
           return const _EmptyProfiles();
@@ -262,6 +265,37 @@ class _MoreTab extends ConsumerWidget {
                 },
               ),
             ),
+
+          // Dynamic pricing toggle — only for household admins
+          Builder(builder: (context) {
+            final household = authState?.household;
+            final currentProfile = authState?.profile;
+            if (household == null || currentProfile == null) {
+              return const SizedBox.shrink();
+            }
+            return SwitchListTile(
+              secondary: const Icon(Icons.tune_outlined),
+              title: const Text('Scale suggestions with family size'),
+              subtitle: Text(
+                household.dynamicPricing
+                    ? 'Limits and price grow as members join'
+                    : 'Fixed limits and price for all plan sizes',
+              ),
+              value: household.dynamicPricing,
+              onChanged: currentProfile.isAdmin
+                  ? (v) async {
+                      await ref
+                          .read(supabaseServiceProvider)
+                          .client
+                          .from(SupabaseTables.households)
+                          .update({'dynamic_pricing': v})
+                          .eq('id', household.id);
+                      ref.invalidate(authProvider);
+                      ref.invalidate(usageNotifierProvider);
+                    }
+                  : null,
+            );
+          }),
 
           // Dev settings — only visible in debug builds
           if (kDebugMode) ...[

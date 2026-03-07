@@ -222,10 +222,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
 class _AuthStateListenable extends ChangeNotifier {
   _AuthStateListenable(this._ref) {
-    _ref.listen<AsyncValue<AuthState>>(authProvider, (_, next) {
+    _subscription = _ref.listen<AsyncValue<AuthState>>(authProvider, (prev, next) {
       notifyListeners();
     });
   }
 
   final Ref _ref;
+  late final ProviderSubscription<AsyncValue<AuthState>> _subscription;
+
+  @override
+  void dispose() {
+    _subscription.close();
+    super.dispose();
+  }
 }

@@ -1,12 +1,17 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:table_calendar/table_calendar.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/utils/error_utils.dart';
 import '../../../data/models/calendar_event.dart';
+import '../../../data/models/outfit.dart';
 import '../../../data/repositories/calendar_repository.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/calendar_provider.dart';
+import '../../providers/outfit_provider.dart';
+import '../../providers/profile_provider.dart';
 
 class StyleCalendarScreen extends ConsumerStatefulWidget {
   const StyleCalendarScreen({super.key, this.embeddedInHome = false});
@@ -73,7 +78,7 @@ class _StyleCalendarScreenState
         Expanded(
           child: eventsAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(child: Text('Error: $e')),
+            error: (e, _) => Center(child: Text(userFriendlyError(e))),
             data: (_) {
               if (_selectedDay == null) {
                 return const Center(
@@ -146,7 +151,7 @@ class _StyleCalendarScreenState
   void _showAddEventDialog(DateTime date) {
     showDialog(
       context: context,
-      builder: (ctx) => _AddEventDialog(date: date, ref: ref),
+      builder: (ctx) => _AddEventDialog(date: date),
     );
   }
 }
@@ -155,14 +160,14 @@ class _StyleCalendarScreenState
 // Event tile
 // ---------------------------------------------------------------------------
 
-class _EventTile extends StatelessWidget {
+class _EventTile extends ConsumerWidget {
   const _EventTile({required this.event, required this.onDelete});
 
   final CalendarEvent event;
   final VoidCallback onDelete;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Card(
       child: ListTile(
         leading: const Icon(Icons.event_outlined),
@@ -174,6 +179,18 @@ class _EventTile extends StatelessWidget {
             if (event.notes != null)
               Text(event.notes!,
                   maxLines: 2, overflow: TextOverflow.ellipsis),
+            if (event.outfitAssignments.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Row(
+                  children: event.outfitAssignments.entries
+                      .map((e) => _OutfitMiniThumb(
+                            profileId: e.key,
+                            outfitId: e.value,
+                          ))
+                      .toList(),
+                ),
+              ),
           ],
         ),
         trailing: IconButton(
@@ -196,8 +213,394 @@ class _EventTile extends StatelessWidget {
             if (confirmed == true) onDelete();
           },
         ),
+        onTap: () => _showEventDetail(context, ref),
         isThreeLine: event.occasion != null && event.notes != null,
       ),
+    );
+  }
+
+  void _showEventDetail(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _EventDetailSheet(event: event, onDelete: onDelete),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Event detail bottom sheet
+// ---------------------------------------------------------------------------
+
+class _EventDetailSheet extends ConsumerWidget {
+  const _EventDetailSheet({required this.event, required this.onDelete});
+
+  final CalendarEvent event;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profilesAsync = ref.watch(profilesProvider);
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.6,
+      minChildSize: 0.4,
+      maxChildSize: 0.9,
+      builder: (_, scrollController) => Column(
+        children: [
+          // Handle
+          Center(
+            child: Container(
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          Expanded(
+            child: ListView(
+              controller: scrollController,
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+              children: [
+                // Header
+                Text(event.title,
+                    style: Theme.of(context).textTheme.headlineSmall),
+                if (event.occasion != null) ...[
+                  const SizedBox(height: 4),
+                  Chip(
+                    label: Text(event.occasion!),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ],
+                if (event.notes != null) ...[
+                  const SizedBox(height: 8),
+                  Text(event.notes!,
+                      style: TextStyle(
+                          color: colorScheme.onSurface.withValues(alpha: 0.7))),
+                ],
+                const SizedBox(height: 20),
+
+                // Assigned outfits section
+                Text('Assigned Outfits',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                profilesAsync.when(
+                  loading: () =>
+                      const Center(child: CircularProgressIndicator()),
+                  error: (e, _) => Text(userFriendlyError(e)),
+                  data: (profiles) => Column(
+                    children: profiles
+                        .map((profile) => _ProfileOutfitRow(
+                              event: event,
+                              profile: profile,
+                            ))
+                        .toList(),
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // Delete button
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: colorScheme.error,
+                    side: BorderSide(color: colorScheme.error),
+                  ),
+                  icon: const Icon(Icons.delete_outline),
+                  label: const Text('Delete Event'),
+                  onPressed: () async {
+                    final confirmed = await showDialog<bool>(
+                      context: context,
+                      builder: (_) => AlertDialog(
+                        title: const Text('Delete Event?'),
+                        actions: [
+                          TextButton(
+                              onPressed: () => Navigator.pop(context, false),
+                              child: const Text('Cancel')),
+                          FilledButton(
+                              onPressed: () => Navigator.pop(context, true),
+                              child: const Text('Delete')),
+                        ],
+                      ),
+                    );
+                    if (confirmed == true) {
+                      onDelete();
+                      if (context.mounted) Navigator.of(context).pop();
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Per-profile outfit assignment row (inside detail sheet)
+// ---------------------------------------------------------------------------
+
+class _ProfileOutfitRow extends ConsumerWidget {
+  const _ProfileOutfitRow({required this.event, required this.profile});
+
+  final CalendarEvent event;
+  final dynamic profile; // Profile
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final assignedOutfitId = event.outfitAssignments[profile.id as String];
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          // Avatar
+          CircleAvatar(
+            radius: 18,
+            backgroundColor: colorScheme.secondaryContainer,
+            backgroundImage: (profile.avatarUrl as String?) != null
+                ? NetworkImage(profile.avatarUrl as String)
+                : null,
+            child: (profile.avatarUrl as String?) == null
+                ? Text(
+                    (profile.name as String).isNotEmpty
+                        ? (profile.name as String)[0].toUpperCase()
+                        : '?',
+                    style: TextStyle(
+                        color: colorScheme.onSecondaryContainer,
+                        fontWeight: FontWeight.bold),
+                  )
+                : null,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(profile.name as String,
+                    style: const TextStyle(fontWeight: FontWeight.w500)),
+                if (assignedOutfitId != null)
+                  _AssignedOutfitLabel(
+                      profileId: profile.id as String,
+                      outfitId: assignedOutfitId),
+              ],
+            ),
+          ),
+          if (assignedOutfitId != null)
+            IconButton(
+              icon: const Icon(Icons.close),
+              tooltip: 'Remove outfit',
+              onPressed: () async {
+                await ref
+                    .read(calendarProvider.notifier)
+                    .removeOutfitAssignment(event.id, profile.id as String);
+              },
+            )
+          else
+            TextButton.icon(
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('Assign'),
+              onPressed: () => showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                useSafeArea: true,
+                builder: (_) => _OutfitPickerSheet(
+                  eventId: event.id,
+                  profileId: profile.id as String,
+                  profileName: profile.name as String,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// Shows the name of the assigned outfit.
+class _AssignedOutfitLabel extends ConsumerWidget {
+  const _AssignedOutfitLabel(
+      {required this.profileId, required this.outfitId});
+
+  final String profileId;
+  final String outfitId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final outfitsAsync = ref.watch(outfitProvider(profileId));
+    return outfitsAsync.when(
+      loading: () => const SizedBox(
+          height: 14,
+          width: 14,
+          child: CircularProgressIndicator(strokeWidth: 1.5)),
+      error: (e, st) => const SizedBox.shrink(),
+      data: (outfits) {
+        final outfit = outfits.where((o) => o.id == outfitId).firstOrNull;
+        if (outfit == null) return const SizedBox.shrink();
+        return Text(outfit.name,
+            style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.primary));
+      },
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Outfit picker bottom sheet
+// ---------------------------------------------------------------------------
+
+class _OutfitPickerSheet extends ConsumerWidget {
+  const _OutfitPickerSheet({
+    required this.eventId,
+    required this.profileId,
+    required this.profileName,
+  });
+
+  final String eventId;
+  final String profileId;
+  final String profileName;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final outfitsAsync = ref.watch(outfitProvider(profileId));
+
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.5,
+      minChildSize: 0.3,
+      maxChildSize: 0.85,
+      builder: (_, scrollController) => Column(
+        children: [
+          Center(
+            child: Container(
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Theme.of(context)
+                    .colorScheme
+                    .onSurfaceVariant
+                    .withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+            child: Text('Pick outfit for $profileName',
+                style: Theme.of(context).textTheme.titleMedium),
+          ),
+          Expanded(
+            child: outfitsAsync.when(
+              loading: () =>
+                  const Center(child: CircularProgressIndicator()),
+              error: (e, _) => Center(child: Text(userFriendlyError(e))),
+              data: (outfits) {
+                if (outfits.isEmpty) {
+                  return const Center(
+                    child: Text('No saved outfits for this member.',
+                        style: TextStyle(color: Colors.grey)),
+                  );
+                }
+                return ListView.builder(
+                  controller: scrollController,
+                  itemCount: outfits.length,
+                  itemBuilder: (_, i) =>
+                      _OutfitPickerTile(
+                        outfit: outfits[i],
+                        onTap: () async {
+                          await ref
+                              .read(calendarProvider.notifier)
+                              .assignOutfit(
+                                  eventId, profileId, outfits[i].id);
+                          if (context.mounted) Navigator.of(context).pop();
+                        },
+                      ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OutfitPickerTile extends StatelessWidget {
+  const _OutfitPickerTile({required this.outfit, required this.onTap});
+
+  final Outfit outfit;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: const CircleAvatar(child: Icon(Icons.checkroom)),
+      title: Text(outfit.name),
+      subtitle: Text(
+        [
+          if (outfit.occasion != null) outfit.occasion!,
+          '${outfit.itemIds.length} item${outfit.itemIds.length == 1 ? '' : 's'}',
+        ].join(' · '),
+        style: const TextStyle(fontSize: 12),
+      ),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: onTap,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Outfit mini thumbnail — 32px circle shown on the event tile
+// ---------------------------------------------------------------------------
+
+class _OutfitMiniThumb extends ConsumerWidget {
+  const _OutfitMiniThumb({required this.profileId, required this.outfitId});
+
+  final String profileId;
+  final String outfitId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final urlAsync = ref.watch(
+      outfitCoverUrlProvider((profileId: profileId, outfitId: outfitId)),
+    );
+    final colorScheme = Theme.of(context).colorScheme;
+
+    Widget child = urlAsync.when(
+      data: (url) => url != null
+          ? CachedNetworkImage(
+              imageUrl: url,
+              fit: BoxFit.cover,
+              errorWidget: (ctx, url, err) =>
+                  Icon(Icons.checkroom, size: 16, color: colorScheme.primary),
+            )
+          : Icon(Icons.checkroom, size: 16, color: colorScheme.primary),
+      loading: () => const SizedBox.shrink(),
+      error: (err, st) =>
+          Icon(Icons.checkroom, size: 16, color: colorScheme.primary),
+    );
+
+    return Container(
+      width: 32,
+      height: 32,
+      margin: const EdgeInsets.only(right: 4),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: colorScheme.primary, width: 1.5),
+        color: colorScheme.surfaceContainerHighest,
+      ),
+      child: Center(child: child),
     );
   }
 }
@@ -207,10 +610,9 @@ class _EventTile extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _AddEventDialog extends ConsumerStatefulWidget {
-  const _AddEventDialog({required this.date, required this.ref});
+  const _AddEventDialog({required this.date});
 
   final DateTime date;
-  final WidgetRef ref;
 
   @override
   ConsumerState<_AddEventDialog> createState() => _AddEventDialogState();
@@ -303,7 +705,7 @@ class _AddEventDialogState extends ConsumerState<_AddEventDialog> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(content: Text(userFriendlyError(e))),
         );
       }
     } finally {

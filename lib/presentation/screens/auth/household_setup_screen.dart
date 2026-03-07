@@ -23,12 +23,15 @@ class _HouseholdSetupScreenState extends ConsumerState<HouseholdSetupScreen>
   final _createFormKey = GlobalKey<FormState>();
   String _hemisphere = 'north';
   Gender _createGender = Gender.other;
+  SkinTone? _createSkinTone;
+  bool _dynamicPricing = true;
 
   // Join household
   final _inviteCodeCtrl = TextEditingController();
   final _joinProfileNameCtrl = TextEditingController();
   final _joinFormKey = GlobalKey<FormState>();
   Gender _joinGender = Gender.other;
+  SkinTone? _joinSkinTone;
 
   @override
   void initState() {
@@ -53,6 +56,8 @@ class _HouseholdSetupScreenState extends ConsumerState<HouseholdSetupScreen>
           profileName: _createProfileNameCtrl.text.trim(),
           hemisphere: _hemisphere,
           gender: _createGender.value,
+          skinTone: _createSkinTone,
+          dynamicPricing: _dynamicPricing,
         );
     _showErrorIfNeeded();
   }
@@ -63,8 +68,85 @@ class _HouseholdSetupScreenState extends ConsumerState<HouseholdSetupScreen>
           inviteCode: _inviteCodeCtrl.text.trim().toUpperCase(),
           profileName: _joinProfileNameCtrl.text.trim(),
           gender: _joinGender.value,
+          skinTone: _joinSkinTone,
         );
     _showErrorIfNeeded();
+  }
+
+  Widget _buildSkinToneRow(SkinTone? current, ValueChanged<SkinTone?> onChanged) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Skin Tone', style: Theme.of(context).textTheme.labelLarge),
+        const SizedBox(height: 4),
+        Text(
+          'Optional — helps Gemini suggest complementary colours.',
+          style: Theme.of(context)
+              .textTheme
+              .bodySmall
+              ?.copyWith(color: Colors.grey[600]),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: SkinTone.values.map((tone) {
+            final selected = current == tone;
+            return GestureDetector(
+              onTap: () => onChanged(selected ? null : tone),
+              child: Column(
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: Color(tone.swatchColor),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: selected
+                            ? Theme.of(context).colorScheme.primary
+                            : Colors.grey.shade300,
+                        width: selected ? 3 : 1,
+                      ),
+                    ),
+                    child: selected
+                        ? Icon(
+                            Icons.check,
+                            size: 16,
+                            color: tone == SkinTone.fair || tone == SkinTone.light
+                                ? Colors.black54
+                                : Colors.white,
+                          )
+                        : null,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(tone.displayName, style: const TextStyle(fontSize: 10)),
+                ],
+              ),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              Icons.info_outline,
+              size: 14,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                'Tip: Set your style personas and fit constraints in the Profile section for even better outfit suggestions.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
   }
 
   void _showErrorIfNeeded() {
@@ -233,7 +315,23 @@ class _HouseholdSetupScreenState extends ConsumerState<HouseholdSetupScreen>
               onSelectionChanged: (val) =>
                   setState(() => _createGender = val.first),
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
+            _buildSkinToneRow(
+              _createSkinTone,
+              (tone) => setState(() => _createSkinTone = tone),
+            ),
+            const SizedBox(height: 8),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Scale with family size'),
+              subtitle: const Text(
+                'ON: suggestion limits and price grow as members join.\n'
+                'OFF: fixed limits and price for all plan sizes.',
+              ),
+              value: _dynamicPricing,
+              onChanged: (v) => setState(() => _dynamicPricing = v),
+            ),
+            const SizedBox(height: 24),
             FilledButton.icon(
               onPressed: isLoading ? null : _createHousehold,
               icon: const Icon(Icons.add_home_outlined),
@@ -303,6 +401,11 @@ class _HouseholdSetupScreenState extends ConsumerState<HouseholdSetupScreen>
               selected: {_joinGender},
               onSelectionChanged: (val) =>
                   setState(() => _joinGender = val.first),
+            ),
+            const SizedBox(height: 24),
+            _buildSkinToneRow(
+              _joinSkinTone,
+              (tone) => setState(() => _joinSkinTone = tone),
             ),
             const SizedBox(height: 32),
             FilledButton.icon(

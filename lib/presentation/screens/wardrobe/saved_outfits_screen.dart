@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/utils/error_utils.dart';
 import '../../../data/models/outfit.dart';
 import '../../providers/outfit_provider.dart';
 import '../../providers/wardrobe_provider.dart';
@@ -20,7 +21,7 @@ class SavedOutfitsScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('Saved Outfits')),
       body: outfitsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        error: (e, _) => Center(child: Text(userFriendlyError(e))),
         data: (outfits) {
           if (outfits.isEmpty) {
             return Center(

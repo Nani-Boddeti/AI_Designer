@@ -22,5 +22,7 @@ final devBypassLimitsProvider =
 class _DevBypassNotifier extends Notifier<bool> {
   @override
   bool build() => false;
-  void set(bool value) => state = value;
+  void set(bool value) {
+    if (kDebugMode) state = value;
+  }
 }

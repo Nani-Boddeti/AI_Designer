@@ -15,9 +15,20 @@ class TierCalculator {
   /// Monthly outfit-generation limit for a household.
   ///
   /// - free  → 15 (flat household pool)
-  /// - pro   → max(Σ per-member, 50)
-  /// - prime → max(Σ per-member, 200)
-  static int monthlyLimit(String tier, List<Profile> profiles) {
+  /// - pro   → max(Σ per-member, 50) when dynamicPricing; flat 50 otherwise
+  /// - prime → max(Σ per-member, 200) when dynamicPricing; flat 200 otherwise
+  static int monthlyLimit(
+    String tier,
+    List<Profile> profiles, {
+    bool dynamicPricing = true,
+  }) {
+    if (!dynamicPricing) {
+      return switch (tier) {
+        'pro'   => TierLimits.proMinSuggestions,
+        'prime' => TierLimits.primeMinSuggestions,
+        _       => TierLimits.freeHouseholdLimit,
+      };
+    }
     if (tier == 'prime') {
       final raw = _sum(profiles, TierLimits.primePerFemale, TierLimits.primePerMale);
       return max(raw, TierLimits.primeMinSuggestions);
@@ -31,9 +42,14 @@ class TierCalculator {
 
   /// Total price in paisa. Returns 0 for free.
   /// Floored at ₹250 (pro) and ₹1000 (prime).
-  static int pricePaisa(String tier, List<Profile> profiles) {
+  static int pricePaisa(
+    String tier,
+    List<Profile> profiles, {
+    bool dynamicPricing = true,
+  }) {
     if (tier == 'free') return 0;
-    final raw = monthlyLimit(tier, profiles) * TierLimits.pricePerSuggestionPaisa;
+    final raw = monthlyLimit(tier, profiles, dynamicPricing: dynamicPricing) *
+        TierLimits.pricePerSuggestionPaisa;
     if (tier == 'prime') return max(raw, TierLimits.primeMinPaisa);
     if (tier == 'pro')   return max(raw, TierLimits.proMinPaisa);
     return raw;

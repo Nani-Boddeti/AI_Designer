@@ -11,7 +11,9 @@ import 'package:http/http.dart' as http;
 
 final weatherServiceProvider = Provider<WeatherService>((ref) {
   final apiKey = const String.fromEnvironment('OPENWEATHER_API_KEY');
-  return WeatherService(apiKey);
+  final service = WeatherService(apiKey);
+  ref.onDispose(() => service.dispose());
+  return service;
 });
 
 // ---------------------------------------------------------------------------
@@ -23,6 +25,7 @@ class WeatherService {
   WeatherService(this._apiKey);
 
   final String _apiKey;
+  final http.Client _httpClient = http.Client();
 
   static const _boxName = 'weather_cache';
   static const _baseUrl = 'https://api.openweathermap.org/data/2.5';
@@ -54,7 +57,9 @@ class WeatherService {
       final entry = cached as Map;
       final fetchedAt = DateTime.fromMillisecondsSinceEpoch(
           entry['fetched_at'] as int? ?? 0);
-      if (DateTime.now().difference(fetchedAt).inHours < 6) {
+      final cachedDay = DateTime(fetchedAt.year, fetchedAt.month, fetchedAt.day);
+      final requestDay = DateTime(date.year, date.month, date.day);
+      if (cachedDay == requestDay) {
         return Map<String, dynamic>.from(entry['data'] as Map);
       }
     }
@@ -83,7 +88,7 @@ class WeatherService {
       'appid': _apiKey,
     });
 
-    final response = await http.get(uri);
+    final response = await _httpClient.get(uri);
     if (response.statusCode != 200) {
       return _mockWeather();
     }
@@ -138,4 +143,9 @@ class WeatherService {
   /// Returns the icon URL for a given OpenWeatherMap icon code.
   static String iconUrl(String iconCode) =>
       'https://openweathermap.org/img/wn/$iconCode@2x.png';
+
+  void dispose() {
+    _httpClient.close();
+    _box?.close();
+  }
 }
