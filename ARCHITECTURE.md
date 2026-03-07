@@ -100,44 +100,16 @@ Storage paths: `wardrobe/{profileId}/{itemId}/original.jpg` and `wardrobe/{profi
 
 Eight tables: `households`, `profiles`, `wardrobe_items`, `outfits`, `calendar_events`, `household_usage`, `app_config`, `device_tokens`. All RLS enabled.
 
-`profiles` notable columns: `age_group`, `gender`, `skin_tone` (nullable), `style_persona` (JSONB `[]`), `fit_preferences` (JSONB `{}`), `auth_user_id` (null for child profiles), `is_admin` (bool).
+Full schema with column definitions, RLS policies, required migrations, and seed data: **`supabase/schema_v1.sql`**.
 
-`households` notable columns: `tier`, `tier_expires_at`, `dynamic_pricing` (bool), `hemisphere`.
+Key notes:
+- `profiles.is_admin` and `households.dynamic_pricing` require migration if not present (see schema_v1.sql)
+- `device_tokens` requires `UNIQUE(user_id, platform)` constraint for `NotificationService` upsert to work
+- `app_config` row `id='android'`: bump `min_version` to trigger force update in all clients
+- `calendar_events.outfit_assignments` — JSONB `{}` map of `profileId → outfitId`
+- `household_usage` PK is `(household_id, year_month)` — upserted by `UsageService`
 
-`calendar_events` notable columns: `outfit_assignments` (JSONB `{}` — profileId → outfitId map).
-
-`household_usage` — monthly counter (`household_id`, `year_month` 'YYYY-MM', `outfit_count`). `UsageService` reads/increments via upsert-on-conflict.
-
-`app_config` — force-update control. Row `id='android'` with `min_version TEXT`, `latest_version TEXT`, `store_url TEXT`. RLS: public SELECT. Bump `min_version` to block older builds.
-
-```sql
-CREATE TABLE app_config (
-  id TEXT PRIMARY KEY,
-  min_version TEXT NOT NULL DEFAULT '1.0.0',
-  latest_version TEXT NOT NULL DEFAULT '1.0.0',
-  store_url TEXT DEFAULT 'https://play.google.com/store/apps/details?id=com.vibevault'
-);
-ALTER TABLE app_config ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Public read" ON app_config FOR SELECT USING (true);
-INSERT INTO app_config (id, min_version, latest_version) VALUES ('android', '1.0.0', '1.0.0');
-```
-
-`device_tokens` — FCM push token per user per platform. UNIQUE(`user_id`, `platform`) — one active token per platform. RLS: users manage own rows; service_role reads all (for Edge Functions).
-
-```sql
-CREATE TABLE device_tokens (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
-  token TEXT NOT NULL,
-  platform TEXT NOT NULL DEFAULT 'android',
-  updated_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(user_id, platform)
-);
-ALTER TABLE device_tokens ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users manage own tokens" ON device_tokens FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
-```
-
-Storage buckets: `wardrobe-images`, `processed-images`, `avatars` (all private — serve via signed URLs).
+Storage buckets: `wardrobe-images`, `processed-images`, `avatars` (all private — served via signed URLs).
 
 ## Theming
 

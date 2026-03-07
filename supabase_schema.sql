@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS households (
   invite_code     TEXT UNIQUE DEFAULT substr(md5(random()::text), 1, 8),
   tier            TEXT CHECK (tier IN ('free','pro','prime')) DEFAULT 'free',
   tier_expires_at TIMESTAMPTZ,
+  dynamic_pricing BOOLEAN DEFAULT true,
   created_at      TIMESTAMPTZ DEFAULT now()
 );
 
@@ -47,6 +48,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   skin_tone       TEXT CHECK (skin_tone IN ('fair','light','medium','olive','brown','dark')),
   style_persona   JSONB DEFAULT '[]',
   fit_preferences JSONB DEFAULT '{}',
+  is_admin        BOOLEAN DEFAULT false,
   created_at      TIMESTAMPTZ DEFAULT now()
 );
 
@@ -273,6 +275,12 @@ CREATE POLICY "usage_update" ON household_usage
 -- Migration: add is_private flag to wardrobe_items
 -- ALTER TABLE wardrobe_items ADD COLUMN IF NOT EXISTS is_private BOOLEAN DEFAULT FALSE;
 
+-- Migration: add dynamic_pricing to existing households table
+-- ALTER TABLE households ADD COLUMN IF NOT EXISTS dynamic_pricing BOOLEAN DEFAULT true;
+
+-- Migration: add is_admin to existing profiles table
+-- ALTER TABLE profiles ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT false;
+
 -- ---------------------------------------------------------------------------
 -- Subscription tier update RPC
 -- ---------------------------------------------------------------------------
@@ -299,3 +307,49 @@ BEGIN
   WHERE id = current_household_id();
 END;
 $$;
+
+-- ---------------------------------------------------------------------------
+-- Force-update version gate
+-- ---------------------------------------------------------------------------
+-- Row id='android' controls minimum required version.
+-- Bump min_version (e.g. '1.1.0') to force-update all clients below that version.
+
+CREATE TABLE IF NOT EXISTS app_config (
+  id              TEXT PRIMARY KEY,
+  min_version     TEXT NOT NULL DEFAULT '1.0.0',
+  latest_version  TEXT NOT NULL DEFAULT '1.0.0',
+  store_url       TEXT DEFAULT 'https://play.google.com/store/apps/details?id=com.vibevault'
+);
+
+ALTER TABLE app_config ENABLE ROW LEVEL SECURITY;
+
+-- Public read — checked before auth, so anon key must be able to read it.
+CREATE POLICY "app_config_public_read" ON app_config
+  FOR SELECT USING (true);
+
+INSERT INTO app_config (id, min_version, latest_version)
+  VALUES ('android', '1.0.0', '1.0.0')
+  ON CONFLICT (id) DO NOTHING;
+
+-- ---------------------------------------------------------------------------
+-- FCM device tokens (push notifications)
+-- ---------------------------------------------------------------------------
+-- One token per user per platform. NotificationService upserts on (user_id, platform).
+
+CREATE TABLE IF NOT EXISTS device_tokens (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  token       TEXT NOT NULL,
+  platform    TEXT NOT NULL DEFAULT 'android',
+  updated_at  TIMESTAMPTZ DEFAULT now(),
+  CONSTRAINT device_tokens_user_platform_key UNIQUE (user_id, platform)
+);
+
+ALTER TABLE device_tokens ENABLE ROW LEVEL SECURITY;
+
+-- Users can manage their own tokens (insert/update/delete from the app).
+CREATE POLICY "device_tokens_user_all" ON device_tokens
+  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+-- Migration: add unique constraint to existing device_tokens table (if table already exists without it)
+-- ALTER TABLE device_tokens ADD CONSTRAINT IF NOT EXISTS device_tokens_user_platform_key UNIQUE (user_id, platform);
