@@ -352,4 +352,8 @@ CREATE POLICY "device_tokens_user_all" ON device_tokens
   FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
 -- Migration: add unique constraint to existing device_tokens table (if table already exists without it)
--- ALTER TABLE device_tokens ADD CONSTRAINT IF NOT EXISTS device_tokens_user_platform_key UNIQUE (user_id, platform);
+-- DO $$ BEGIN
+--   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'device_tokens_user_platform_key') THEN
+--     ALTER TABLE device_tokens ADD CONSTRAINT device_tokens_user_platform_key UNIQUE (user_id, platform);
+--   END IF;
+-- END; $$;
