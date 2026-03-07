@@ -48,6 +48,11 @@ app.*.map.json
 .env
 .claude/
 .knownPackages
+
+# Firebase — contains API keys, never commit
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+lib/firebase_options.dart
 pubspec.lock
 build/
 build_apk.sh

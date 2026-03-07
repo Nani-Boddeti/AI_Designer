@@ -1,3 +1,4 @@
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -185,7 +186,8 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         profile: result.profile,
         household: result.household,
       ));
-    } catch (e) {
+    } catch (e, stack) {
+      FirebaseCrashlytics.instance.recordError(e, stack, reason: 'createHousehold');
       state = AsyncData(prev.copyWith(isLoading: false, error: userFriendlyError(e)));
     }
   }
@@ -202,7 +204,8 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     try {
       await ref.read(authRepositoryProvider).deleteAccount();
       state = const AsyncData(AuthState());
-    } catch (e) {
+    } catch (e, stack) {
+      FirebaseCrashlytics.instance.recordError(e, stack, reason: 'deleteAccount');
       state = AsyncData(prev.copyWith(isLoading: false, error: userFriendlyError(e)));
     }
   }
@@ -229,7 +232,8 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         profile: result.profile,
         household: result.household,
       ));
-    } catch (e) {
+    } catch (e, stack) {
+      FirebaseCrashlytics.instance.recordError(e, stack, reason: 'joinHousehold');
       state = AsyncData(prev.copyWith(isLoading: false, error: userFriendlyError(e)));
     }
   }

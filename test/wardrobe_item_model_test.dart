@@ -96,34 +96,34 @@ void main() {
 
   // -------------------------------------------------------------------------
   group('WardrobeItem.fromJson — category parsing', () {
-    WardrobeItem _withCategory(String cat) => WardrobeItem.fromJson({
+    WardrobeItem withCategory(String cat) => WardrobeItem.fromJson({
           ..._minimalJson(),
           'category': cat,
         });
 
     test('"top" → WardrobeCategory.top', () {
-      expect(_withCategory('top').category, WardrobeCategory.top);
+      expect(withCategory('top').category, WardrobeCategory.top);
     });
     test('"bottom" → WardrobeCategory.bottom', () {
-      expect(_withCategory('bottom').category, WardrobeCategory.bottom);
+      expect(withCategory('bottom').category, WardrobeCategory.bottom);
     });
     test('"dress" → WardrobeCategory.dress', () {
-      expect(_withCategory('dress').category, WardrobeCategory.dress);
+      expect(withCategory('dress').category, WardrobeCategory.dress);
     });
     test('"outerwear" → WardrobeCategory.outerwear', () {
-      expect(_withCategory('outerwear').category, WardrobeCategory.outerwear);
+      expect(withCategory('outerwear').category, WardrobeCategory.outerwear);
     });
     test('"shoes" → WardrobeCategory.shoes', () {
-      expect(_withCategory('shoes').category, WardrobeCategory.shoes);
+      expect(withCategory('shoes').category, WardrobeCategory.shoes);
     });
     test('"accessory" → WardrobeCategory.accessory', () {
-      expect(_withCategory('accessory').category, WardrobeCategory.accessory);
+      expect(withCategory('accessory').category, WardrobeCategory.accessory);
     });
     test('"swimwear" → WardrobeCategory.swimwear', () {
-      expect(_withCategory('swimwear').category, WardrobeCategory.swimwear);
+      expect(withCategory('swimwear').category, WardrobeCategory.swimwear);
     });
     test('unknown string falls back to top', () {
-      expect(_withCategory('unknown_xyz').category, WardrobeCategory.top);
+      expect(withCategory('unknown_xyz').category, WardrobeCategory.top);
     });
     test('null category falls back to top', () {
       final json = Map<String, dynamic>.from(_minimalJson())

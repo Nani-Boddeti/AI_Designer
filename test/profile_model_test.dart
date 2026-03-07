@@ -89,16 +89,16 @@ void main() {
 
   // -------------------------------------------------------------------------
   group('Profile.fromJson — age_group fallback', () {
-    Profile _withAgeGroup(String? v) {
+    Profile withAgeGroup(String? v) {
       final json = Map<String, dynamic>.from(_minimalJson())
         ..['age_group'] = v ?? 'adult';
       return Profile.fromJson(json);
     }
 
-    test('toddler', () => expect(_withAgeGroup('toddler').ageGroup, AgeGroup.toddler));
-    test('child',   () => expect(_withAgeGroup('child').ageGroup,   AgeGroup.child));
-    test('teen',    () => expect(_withAgeGroup('teen').ageGroup,    AgeGroup.teen));
-    test('adult',   () => expect(_withAgeGroup('adult').ageGroup,   AgeGroup.adult));
+    test('toddler', () => expect(withAgeGroup('toddler').ageGroup, AgeGroup.toddler));
+    test('child',   () => expect(withAgeGroup('child').ageGroup,   AgeGroup.child));
+    test('teen',    () => expect(withAgeGroup('teen').ageGroup,    AgeGroup.teen));
+    test('adult',   () => expect(withAgeGroup('adult').ageGroup,   AgeGroup.adult));
     test('unknown → adult', () {
       final json = Map<String, dynamic>.from(_minimalJson())
         ..['age_group'] = 'invalid';
@@ -108,32 +108,32 @@ void main() {
 
   // -------------------------------------------------------------------------
   group('Profile.fromJson — gender fallback', () {
-    Profile _withGender(String? v) {
+    Profile withGender(String? v) {
       final json = Map<String, dynamic>.from(_fullJson())
         ..['gender'] = v;
       return Profile.fromJson(json);
     }
 
-    test('male',   () => expect(_withGender('male').gender,   Gender.male));
-    test('female', () => expect(_withGender('female').gender, Gender.female));
-    test('other',  () => expect(_withGender('other').gender,  Gender.other));
-    test('null → other', () => expect(_withGender(null).gender, Gender.other));
-    test('unknown → other', () => expect(_withGender('nonbinary').gender, Gender.other));
+    test('male',   () => expect(withGender('male').gender,   Gender.male));
+    test('female', () => expect(withGender('female').gender, Gender.female));
+    test('other',  () => expect(withGender('other').gender,  Gender.other));
+    test('null → other', () => expect(withGender(null).gender, Gender.other));
+    test('unknown → other', () => expect(withGender('nonbinary').gender, Gender.other));
   });
 
   // -------------------------------------------------------------------------
   group('Profile.fromJson — skinTone', () {
-    Profile _withSkinTone(String? v) {
+    Profile withSkinTone(String? v) {
       final json = Map<String, dynamic>.from(_minimalJson())
         ..['skin_tone'] = v;
       return Profile.fromJson(json);
     }
 
-    test('null → null skinTone', () => expect(_withSkinTone(null).skinTone, isNull));
-    test('fair',   () => expect(_withSkinTone('fair').skinTone,   SkinTone.fair));
-    test('medium', () => expect(_withSkinTone('medium').skinTone, SkinTone.medium));
-    test('dark',   () => expect(_withSkinTone('dark').skinTone,   SkinTone.dark));
-    test('unknown → null skinTone', () => expect(_withSkinTone('alabaster').skinTone, isNull));
+    test('null → null skinTone', () => expect(withSkinTone(null).skinTone, isNull));
+    test('fair',   () => expect(withSkinTone('fair').skinTone,   SkinTone.fair));
+    test('medium', () => expect(withSkinTone('medium').skinTone, SkinTone.medium));
+    test('dark',   () => expect(withSkinTone('dark').skinTone,   SkinTone.dark));
+    test('unknown → null skinTone', () => expect(withSkinTone('alabaster').skinTone, isNull));
   });
 
   // -------------------------------------------------------------------------

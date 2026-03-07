@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
@@ -126,8 +127,10 @@ class WardrobeRepository {
       processedBytes = await bgRemovalService.removeBackground(
         Uint8List.fromList(compressed),
       );
-    } catch (e) {
+    } catch (e, stack) {
       // Background removal is optional; proceed without it.
+      FirebaseCrashlytics.instance
+          .recordError(e, stack, reason: 'bg-removal-failed', fatal: false);
       onStep?.call('Background removal skipped — saving original');
     }
 
@@ -138,8 +141,10 @@ class WardrobeRepository {
       tags = await geminiService.tagWardrobeItem(
         Uint8List.fromList(compressed),
       );
-    } catch (_) {
+    } catch (e, stack) {
       // Tagging failure should not block saving the item.
+      FirebaseCrashlytics.instance
+          .recordError(e, stack, reason: 'ai-tagging-failed', fatal: false);
     }
 
     // Step 4: Upload images
