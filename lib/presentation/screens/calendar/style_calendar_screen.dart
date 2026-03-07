@@ -459,7 +459,7 @@ class _AssignedOutfitLabel extends ConsumerWidget {
 // Outfit picker bottom sheet
 // ---------------------------------------------------------------------------
 
-class _OutfitPickerSheet extends ConsumerWidget {
+class _OutfitPickerSheet extends ConsumerStatefulWidget {
   const _OutfitPickerSheet({
     required this.eventId,
     required this.profileId,
@@ -471,8 +471,33 @@ class _OutfitPickerSheet extends ConsumerWidget {
   final String profileName;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final outfitsAsync = ref.watch(outfitProvider(profileId));
+  ConsumerState<_OutfitPickerSheet> createState() =>
+      _OutfitPickerSheetState();
+}
+
+class _OutfitPickerSheetState extends ConsumerState<_OutfitPickerSheet> {
+  String? _assigningId;
+
+  Future<void> _assign(String outfitId) async {
+    setState(() => _assigningId = outfitId);
+    try {
+      await ref
+          .read(calendarProvider.notifier)
+          .assignOutfit(widget.eventId, widget.profileId, outfitId);
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      if (mounted) {
+        setState(() => _assigningId = null);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(userFriendlyError(e))),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final outfitsAsync = ref.watch(outfitProvider(widget.profileId));
 
     return DraggableScrollableSheet(
       expand: false,
@@ -497,14 +522,15 @@ class _OutfitPickerSheet extends ConsumerWidget {
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-            child: Text('Pick outfit for $profileName',
+            child: Text('Pick outfit for ${widget.profileName}',
                 style: Theme.of(context).textTheme.titleMedium),
           ),
           Expanded(
             child: outfitsAsync.when(
               loading: () =>
                   const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text(userFriendlyError(e))),
+              error: (e, _) =>
+                  Center(child: Text(userFriendlyError(e))),
               data: (outfits) {
                 if (outfits.isEmpty) {
                   return const Center(
@@ -515,17 +541,15 @@ class _OutfitPickerSheet extends ConsumerWidget {
                 return ListView.builder(
                   controller: scrollController,
                   itemCount: outfits.length,
-                  itemBuilder: (_, i) =>
-                      _OutfitPickerTile(
-                        outfit: outfits[i],
-                        onTap: () async {
-                          await ref
-                              .read(calendarProvider.notifier)
-                              .assignOutfit(
-                                  eventId, profileId, outfits[i].id);
-                          if (context.mounted) Navigator.of(context).pop();
-                        },
-                      ),
+                  itemBuilder: (_, i) => _OutfitPickerTile(
+                    outfit: outfits[i],
+                    profileId: widget.profileId,
+                    isAssigning: _assigningId == outfits[i].id,
+                    isDisabled: _assigningId != null,
+                    onTap: _assigningId == null
+                        ? () => _assign(outfits[i].id)
+                        : null,
+                  ),
                 );
               },
             ),
@@ -536,16 +560,69 @@ class _OutfitPickerSheet extends ConsumerWidget {
   }
 }
 
-class _OutfitPickerTile extends StatelessWidget {
-  const _OutfitPickerTile({required this.outfit, required this.onTap});
+class _OutfitPickerTile extends ConsumerWidget {
+  const _OutfitPickerTile({
+    required this.outfit,
+    required this.profileId,
+    required this.isAssigning,
+    required this.isDisabled,
+    required this.onTap,
+  });
 
   final Outfit outfit;
-  final VoidCallback onTap;
+  final String profileId;
+  final bool isAssigning;
+  final bool isDisabled;
+  final VoidCallback? onTap;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final coverAsync = ref.watch(
+      outfitCoverUrlProvider((profileId: profileId, outfitId: outfit.id)),
+    );
+
     return ListTile(
-      leading: const CircleAvatar(child: Icon(Icons.checkroom)),
+      enabled: !isDisabled,
+      leading: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: SizedBox(
+          width: 52,
+          height: 52,
+          child: coverAsync.when(
+            loading: () => Container(
+              color: colorScheme.surfaceContainerHighest,
+              child: const Center(
+                child: SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 1.5),
+                ),
+              ),
+            ),
+            error: (_, _) => Container(
+              color: colorScheme.surfaceContainerHighest,
+              child: Icon(Icons.checkroom,
+                  size: 24, color: colorScheme.onSurfaceVariant),
+            ),
+            data: (url) => url != null
+                ? CachedNetworkImage(
+                    imageUrl: url,
+                    fit: BoxFit.cover,
+                    errorWidget: (_, _, _) => Container(
+                      color: colorScheme.surfaceContainerHighest,
+                      child: Icon(Icons.checkroom,
+                          size: 24, color: colorScheme.onSurfaceVariant),
+                    ),
+                  )
+                : Container(
+                    color: colorScheme.surfaceContainerHighest,
+                    child: Icon(Icons.checkroom,
+                        size: 24, color: colorScheme.onSurfaceVariant),
+                  ),
+          ),
+        ),
+      ),
       title: Text(outfit.name),
       subtitle: Text(
         [
@@ -554,7 +631,15 @@ class _OutfitPickerTile extends StatelessWidget {
         ].join(' · '),
         style: const TextStyle(fontSize: 12),
       ),
-      trailing: const Icon(Icons.chevron_right),
+      trailing: isAssigning
+          ? SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: colorScheme.primary),
+            )
+          : Icon(Icons.chevron_right,
+              color: isDisabled ? colorScheme.onSurface.withValues(alpha: 0.3) : null),
       onTap: onTap,
     );
   }

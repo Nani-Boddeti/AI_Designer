@@ -1,3 +1,6 @@
+// Sentinel — lets copyWith distinguish "clear to null" from "keep existing".
+const _kSentinel = Object();
+
 /// An outfit – a curated collection of wardrobe items for a profile.
 class Outfit {
   const Outfit({
@@ -56,9 +59,10 @@ class Outfit {
     String? id,
     String? profileId,
     String? name,
-    String? occasion,
+    // Pass null to clear, omit to keep existing value.
+    Object? occasion = _kSentinel,
     List<String>? itemIds,
-    String? notes,
+    Object? notes = _kSentinel,
     bool? isAiGenerated,
     DateTime? createdAt,
   }) {
@@ -66,9 +70,9 @@ class Outfit {
       id: id ?? this.id,
       profileId: profileId ?? this.profileId,
       name: name ?? this.name,
-      occasion: occasion ?? this.occasion,
+      occasion: identical(occasion, _kSentinel) ? this.occasion : occasion as String?,
       itemIds: itemIds ?? this.itemIds,
-      notes: notes ?? this.notes,
+      notes: identical(notes, _kSentinel) ? this.notes : notes as String?,
       isAiGenerated: isAiGenerated ?? this.isAiGenerated,
       createdAt: createdAt ?? this.createdAt,
     );

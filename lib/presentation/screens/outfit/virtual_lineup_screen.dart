@@ -75,6 +75,24 @@ class _VirtualLineupScreenState extends ConsumerState<VirtualLineupScreen> {
             );
           }
 
+          // One column per profile — take the lowest variantNumber for each.
+          final perProfile = <String, GeneratedOutfit>{};
+          for (final g in generated) {
+            final existing = perProfile[g.outfit.profileId];
+            if (existing == null ||
+                g.variantNumber < existing.variantNumber) {
+              perProfile[g.outfit.profileId] = g;
+            }
+          }
+          final lineupItems = perProfile.values.toList();
+
+          // All columns share the same number of item slots — the max across
+          // all members — so a member with 1 item gets the same column height
+          // as one with 3, keeping the lineup visually aligned.
+          final maxItemCount = lineupItems
+              .map((g) => g.outfit.itemIds.length)
+              .fold(1, (a, b) => a > b ? a : b);
+
           return Screenshot(
             controller: _screenshotController,
             child: Container(
@@ -95,15 +113,17 @@ class _VirtualLineupScreenState extends ConsumerState<VirtualLineupScreen> {
                     ),
                   ),
 
-                  // Horizontal lineup
+                  // One column per family member
                   Expanded(
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.all(16),
-                      itemCount: generated.length,
+                      itemCount: lineupItems.length,
                       separatorBuilder: (_, _) => const SizedBox(width: 12),
-                      itemBuilder: (context, i) =>
-                          _ProfileColumn(generatedOutfit: generated[i]),
+                      itemBuilder: (context, i) => _ProfileColumn(
+                        generatedOutfit: lineupItems[i],
+                        maxItemCount: maxItemCount,
+                      ),
                     ),
                   ),
                 ],
@@ -132,9 +152,13 @@ class _VirtualLineupScreenState extends ConsumerState<VirtualLineupScreen> {
 // ---------------------------------------------------------------------------
 
 class _ProfileColumn extends ConsumerWidget {
-  const _ProfileColumn({required this.generatedOutfit});
+  const _ProfileColumn({
+    required this.generatedOutfit,
+    required this.maxItemCount,
+  });
 
   final GeneratedOutfit generatedOutfit;
+  final int maxItemCount;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -192,7 +216,7 @@ class _ProfileColumn extends ConsumerWidget {
                   ? const Center(
                       child: Text('No items', style: TextStyle(color: Colors.grey)),
                     )
-                  : _StackedItems(items: outfitItems),
+                  : _StackedItems(items: outfitItems, maxItemCount: maxItemCount),
             ),
           ),
         ],
@@ -202,41 +226,62 @@ class _ProfileColumn extends ConsumerWidget {
 }
 
 class _StackedItems extends StatelessWidget {
-  const _StackedItems({required this.items});
+  const _StackedItems({required this.items, required this.maxItemCount});
 
   final List<WardrobeItem> items;
+  final int maxItemCount;
 
   @override
   Widget build(BuildContext context) {
-    return ListView.builder(
-      padding: const EdgeInsets.all(4),
-      itemCount: items.length,
-      itemBuilder: (_, i) {
-        final url = items[i].displayImageUrl;
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 4),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: AspectRatio(
-              aspectRatio: 1,
-              child: url != null
-                  ? CachedNetworkImage(
-                      imageUrl: url,
-                      fit: items[i].processedImageUrl != null
-                          ? BoxFit.contain
-                          : BoxFit.cover,
-                      placeholder: (_, _) => Container(color: Colors.grey[200]),
-                      errorWidget: (_, _, e) =>
-                          const Icon(Icons.broken_image),
-                    )
-                  : Container(
-                      color: Colors.grey[200],
-                      child: const Icon(Icons.image_outlined),
+    // Available height is divided equally into maxItemCount slots.
+    // Members with fewer items get empty slots — keeping all columns aligned.
+    return Column(
+      children: List.generate(maxItemCount, (i) {
+        final hasItem = i < items.length;
+        return Expanded(
+          child: Padding(
+            padding: const EdgeInsets.all(3),
+            child: hasItem
+                ? _ItemTile(item: items[i])
+                : Container(
+                    decoration: BoxDecoration(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .surfaceContainerHighest
+                          .withValues(alpha: 0.4),
+                      borderRadius: BorderRadius.circular(6),
                     ),
-            ),
+                  ),
           ),
         );
-      },
+      }),
+    );
+  }
+}
+
+class _ItemTile extends StatelessWidget {
+  const _ItemTile({required this.item});
+
+  final WardrobeItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final url = item.displayImageUrl;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(6),
+      child: url != null
+          ? CachedNetworkImage(
+              imageUrl: url,
+              fit: item.processedImageUrl != null
+                  ? BoxFit.contain
+                  : BoxFit.cover,
+              placeholder: (_, _) => Container(color: Colors.grey[200]),
+              errorWidget: (_, _, _) => const Icon(Icons.broken_image),
+            )
+          : Container(
+              color: Colors.grey[200],
+              child: const Icon(Icons.image_outlined),
+            ),
     );
   }
 }

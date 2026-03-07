@@ -91,12 +91,16 @@ class OutfitNotifier extends AsyncNotifier<List<Outfit>> {
   Future<void> saveOutfit(Outfit outfit) async {
     final repo = ref.read(outfitRepositoryProvider);
     final saved = await repo.saveOutfit(outfit);
+    // Provider may have been auto-disposed during the async gap if no widget
+    // is watching it (result screen only reads, never watches).
+    if (!ref.mounted) return;
     state = AsyncData<List<Outfit>>([saved, ...(state.value ?? <Outfit>[])]);
   }
 
   Future<void> deleteOutfit(String outfitId) async {
     final repo = ref.read(outfitRepositoryProvider);
     await repo.deleteOutfit(outfitId);
+    if (!ref.mounted) return;
     final updated = <Outfit>[...(state.value ?? <Outfit>[])]
       ..removeWhere((o) => o.id == outfitId);
     state = AsyncData<List<Outfit>>(updated);
@@ -104,12 +108,18 @@ class OutfitNotifier extends AsyncNotifier<List<Outfit>> {
 
   Future<void> refresh() async {
     state = const AsyncLoading();
-    state = await AsyncValue.guard(() => build());
+    final next = await AsyncValue.guard(() => build());
+    if (!ref.mounted) return;
+    state = next;
   }
 }
 
-final outfitProvider = AsyncNotifierProvider.autoDispose
-    .family<OutfitNotifier, List<Outfit>, String>(
+// Not autoDispose: saved outfits are session-persistent DB data referenced
+// by multiple screens (result, saved list, calendar thumbnails). autoDispose
+// caused the provider to self-destruct during async save gaps when nothing
+// was watching it, making ref invalid and crashing on state updates.
+final outfitProvider =
+    AsyncNotifierProvider.family<OutfitNotifier, List<Outfit>, String>(
   (arg) => OutfitNotifier(arg),
 );
 

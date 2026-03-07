@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/constants/app_constants.dart';
+import '../../core/services/notification_service.dart';
 import '../../core/utils/error_utils.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../data/services/supabase_service.dart';
@@ -99,6 +102,12 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       final household = await svc
           .getHousehold(profile.householdId)
           .timeout(const Duration(seconds: 10));
+
+      // Sync FCM token in the background — non-blocking, non-fatal.
+      unawaited(
+        NotificationService.syncToken(svc.client, user.id).catchError((_) {}),
+      );
+
       return AuthState(user: user, profile: profile, household: household);
     } catch (_) {
       // Profile/household fetch failed (RLS, timeout, network) — user is still
@@ -150,8 +159,16 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
   }
 
   Future<void> signOut() async {
+    final userId = state.value?.user?.id;
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
+      final svc = ref.read(supabaseServiceProvider);
+      // Remove the device token before signing out.
+      if (userId != null) {
+        unawaited(
+          NotificationService.removeToken(svc.client, userId).catchError((_) {}),
+        );
+      }
       await ref.read(authRepositoryProvider).signOut();
       return const AuthState();
     });
@@ -232,6 +249,24 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         profile: result.profile,
         household: result.household,
       ));
+
+      // Notify existing household members — fire-and-forget, non-fatal.
+      final householdId = result.household.id;
+      final newUserId = repo.currentUser?.id;
+      if (newUserId != null) {
+        unawaited(() async {
+          try {
+            await ref.read(supabaseServiceProvider).client.functions.invoke(
+              'notify-member-joined',
+              body: {
+                'household_id': householdId,
+                'new_member_name': profileName,
+                'new_user_id': newUserId,
+              },
+            );
+          } catch (_) {}
+        }());
+      }
     } catch (e, stack) {
       FirebaseCrashlytics.instance.recordError(e, stack, reason: 'joinHousehold');
       state = AsyncData(prev.copyWith(isLoading: false, error: userFriendlyError(e)));

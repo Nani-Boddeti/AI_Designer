@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'core/services/notification_service.dart';
 import 'core/theme/app_theme.dart';
 import 'firebase_options.dart';
 import 'router/app_router.dart';
@@ -35,6 +36,8 @@ Future<void> main() async {
       authFlowType: AuthFlowType.pkce,
     ),
   );
+
+  await NotificationService.initialize();
 
   await Hive.initFlutter();
   await Hive.openBox('app_settings');

@@ -4,7 +4,9 @@ import 'package:go_router/go_router.dart';
 
 import '../presentation/providers/auth_provider.dart';
 import '../presentation/providers/onboarding_provider.dart';
+import '../presentation/providers/version_check_provider.dart';
 import '../presentation/screens/auth/auth_screen.dart';
+import '../presentation/screens/force_update/force_update_screen.dart';
 import '../presentation/screens/auth/household_setup_screen.dart';
 import '../presentation/screens/calendar/style_calendar_screen.dart';
 import '../presentation/screens/home/home_screen.dart';
@@ -52,6 +54,7 @@ class AppRoutes {
   static const String onboarding = '/onboarding';
   static const String savedOutfits = '/saved-outfits/:profileId';
   static const String manualItemSelection = '/manual-item-selection';
+  static const String forceUpdate = '/force-update';
 
   // Helper to build concrete paths.
   static String wardrobePath(String profileId) => '/wardrobe/$profileId';
@@ -77,6 +80,21 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     initialLocation: AppRoutes.splash,
     refreshListenable: authStateListenable,
     redirect: (context, state) {
+      // ── 1. Force-update check (highest priority, blocks all navigation) ──
+      final versionAsync = ref.read(versionCheckProvider);
+      if (versionAsync.isLoading) return null; // wait for check to resolve
+      final updateRequired = versionAsync.value ?? false;
+      if (updateRequired) {
+        return state.matchedLocation == AppRoutes.forceUpdate
+            ? null
+            : AppRoutes.forceUpdate;
+      }
+      // Not on force-update anymore after an update — bounce off that screen.
+      if (state.matchedLocation == AppRoutes.forceUpdate) {
+        return AppRoutes.splash;
+      }
+
+      // ── 2. Auth check ────────────────────────────────────────────────────
       final authAsync = ref.read(authProvider);
       final authValue = authAsync.value;
       final isLoading = authAsync.isLoading;
@@ -212,6 +230,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.manualItemSelection,
         builder: (_, _) => const ManualItemSelectionScreen(),
       ),
+      GoRoute(
+        path: AppRoutes.forceUpdate,
+        builder: (_, _) => const ForceUpdateScreen(),
+      ),
     ],
   );
 });
@@ -222,17 +244,22 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
 class _AuthStateListenable extends ChangeNotifier {
   _AuthStateListenable(this._ref) {
-    _subscription = _ref.listen<AsyncValue<AuthState>>(authProvider, (prev, next) {
+    _authSub = _ref.listen<AsyncValue<AuthState>>(authProvider, (prev, next) {
+      notifyListeners();
+    });
+    _versionSub = _ref.listen<AsyncValue<bool>>(versionCheckProvider, (prev, next) {
       notifyListeners();
     });
   }
 
   final Ref _ref;
-  late final ProviderSubscription<AsyncValue<AuthState>> _subscription;
+  late final ProviderSubscription<AsyncValue<AuthState>> _authSub;
+  late final ProviderSubscription<AsyncValue<bool>> _versionSub;
 
   @override
   void dispose() {
-    _subscription.close();
+    _authSub.close();
+    _versionSub.close();
     super.dispose();
   }
 }

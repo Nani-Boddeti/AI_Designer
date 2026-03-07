@@ -3,6 +3,10 @@
     <!-- MANDATORY: internet access — all features require this (auto-granted, no dialog) -->
     <uses-permission android:name="android.permission.INTERNET"/>
 
+    <!-- OPTIONAL: push notifications — Android 13+ requires explicit permission.
+         firebase_messaging requests this at runtime via requestPermission(). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+
     <!-- OPTIONAL: location — used for accurate weather in outfit suggestions.
          If denied, weather falls back to a default location. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>

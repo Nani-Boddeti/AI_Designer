@@ -3,17 +3,25 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/services/review_service.dart';
 import '../../../data/models/wardrobe_item.dart';
 import '../../../router/app_router.dart';
 import '../../providers/outfit_provider.dart';
 import '../../providers/wardrobe_provider.dart';
 import '../../../data/repositories/outfit_repository.dart';
 
-class OutfitResultScreen extends ConsumerWidget {
+class OutfitResultScreen extends ConsumerStatefulWidget {
   const OutfitResultScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<OutfitResultScreen> createState() => _OutfitResultScreenState();
+}
+
+class _OutfitResultScreenState extends ConsumerState<OutfitResultScreen> {
+  bool _savingAll = false;
+
+  @override
+  Widget build(BuildContext context) {
     final generated = ref.watch(generatedOutfitsProvider);
 
     if (generated.isEmpty) {
@@ -48,9 +56,16 @@ class OutfitResultScreen extends ConsumerWidget {
         children: [
           FloatingActionButton.extended(
             heroTag: 'save_all',
-            onPressed: () => _saveAll(context, ref, generated),
-            icon: const Icon(Icons.bookmark_add_outlined),
-            label: const Text('Save All'),
+            onPressed: _savingAll ? null : () => _saveAll(generated),
+            icon: _savingAll
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white),
+                  )
+                : const Icon(Icons.bookmark_add_outlined),
+            label: Text(_savingAll ? 'Saving…' : 'Save All'),
           ),
           const SizedBox(height: 8),
           FloatingActionButton.extended(
@@ -65,6 +80,32 @@ class OutfitResultScreen extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _saveAll(List<GeneratedOutfit> generated) async {
+    setState(() => _savingAll = true);
+    try {
+      for (final g in generated) {
+        await ref
+            .read(outfitProvider(g.outfit.profileId).notifier)
+            .saveOutfit(g.outfit);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('All outfits saved!')),
+        );
+        // Trigger in-app review after the user's first successful outfit save.
+        ReviewService.requestIfEligible();
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Some outfits could not be saved. Try again.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _savingAll = false);
+    }
   }
 
   Widget _buildGroupedBody(
@@ -110,22 +151,6 @@ class OutfitResultScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _saveAll(
-    BuildContext context,
-    WidgetRef ref,
-    List<GeneratedOutfit> generated,
-  ) async {
-    for (final g in generated) {
-      await ref
-          .read(outfitProvider(g.outfit.profileId).notifier)
-          .saveOutfit(g.outfit);
-    }
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('All outfits saved!')),
-      );
-    }
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -198,15 +223,14 @@ class _OutfitCardState extends ConsumerState<_OutfitCard> {
 
   Future<void> _save() async {
     setState(() => _saving = true);
-    final outfit = widget.generated.outfit;
-    await ref
-        .read(outfitProvider(outfit.profileId).notifier)
-        .saveOutfit(outfit);
-    if (mounted) {
-      setState(() {
-        _saving = false;
-        _saved = true;
-      });
+    try {
+      final outfit = widget.generated.outfit;
+      await ref
+          .read(outfitProvider(outfit.profileId).notifier)
+          .saveOutfit(outfit);
+      if (mounted) setState(() { _saving = false; _saved = true; });
+    } catch (_) {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
