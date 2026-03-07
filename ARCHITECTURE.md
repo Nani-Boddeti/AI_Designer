@@ -27,11 +27,12 @@ Providers defined at the bottom of each file. Repositories receive `SupabaseServ
 
 ## Auth & Navigation Flow
 
-GoRouter (`lib/router/app_router.dart`) drives navigation via `_AuthStateListenable` — a `ChangeNotifier` wrapping `authProvider`. Redirect logic:
-1. Unauthenticated → `/auth`
-2. First launch → `/onboarding`
-3. Authenticated, no household → `/household-setup`
-4. Authenticated + household → `/home`
+GoRouter (`lib/router/app_router.dart`) drives navigation via `_AuthStateListenable` — a `ChangeNotifier` wrapping `authProvider` **and** `versionCheckProvider`. Redirect logic:
+1. Version check fails (below `min_version`) → `/force-update` (blocking, non-dismissable)
+2. Unauthenticated → `/auth`
+3. First launch → `/onboarding`
+4. Authenticated, no household → `/household-setup`
+5. Authenticated + household → `/home`
 
 `AuthState` held by `AuthNotifier` containing `User?`, `Profile?`, `Household?`, `isLoading`, `error`.
 
@@ -97,7 +98,7 @@ Storage paths: `wardrobe/{profileId}/{itemId}/original.jpg` and `wardrobe/{profi
 
 ## Supabase Schema
 
-Six tables: `households`, `profiles`, `wardrobe_items`, `outfits`, `calendar_events`, `household_usage`. All RLS enabled via `current_household_id()` (SECURITY DEFINER) — looks up household through `profiles.auth_user_id = auth.uid()`.
+Eight tables: `households`, `profiles`, `wardrobe_items`, `outfits`, `calendar_events`, `household_usage`, `app_config`, `device_tokens`. All RLS enabled.
 
 `profiles` notable columns: `age_group`, `gender`, `skin_tone` (nullable), `style_persona` (JSONB `[]`), `fit_preferences` (JSONB `{}`), `auth_user_id` (null for child profiles), `is_admin` (bool).
 
@@ -107,7 +108,36 @@ Six tables: `households`, `profiles`, `wardrobe_items`, `outfits`, `calendar_eve
 
 `household_usage` — monthly counter (`household_id`, `year_month` 'YYYY-MM', `outfit_count`). `UsageService` reads/increments via upsert-on-conflict.
 
-Storage buckets: `wardrobe-images`, `processed-images`, `avatars` (all public).
+`app_config` — force-update control. Row `id='android'` with `min_version TEXT`, `latest_version TEXT`, `store_url TEXT`. RLS: public SELECT. Bump `min_version` to block older builds.
+
+```sql
+CREATE TABLE app_config (
+  id TEXT PRIMARY KEY,
+  min_version TEXT NOT NULL DEFAULT '1.0.0',
+  latest_version TEXT NOT NULL DEFAULT '1.0.0',
+  store_url TEXT DEFAULT 'https://play.google.com/store/apps/details?id=com.vibevault'
+);
+ALTER TABLE app_config ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public read" ON app_config FOR SELECT USING (true);
+INSERT INTO app_config (id, min_version, latest_version) VALUES ('android', '1.0.0', '1.0.0');
+```
+
+`device_tokens` — FCM push token per user per platform. UNIQUE(`user_id`, `platform`) — one active token per platform. RLS: users manage own rows; service_role reads all (for Edge Functions).
+
+```sql
+CREATE TABLE device_tokens (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  token TEXT NOT NULL,
+  platform TEXT NOT NULL DEFAULT 'android',
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, platform)
+);
+ALTER TABLE device_tokens ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users manage own tokens" ON device_tokens FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+```
+
+Storage buckets: `wardrobe-images`, `processed-images`, `avatars` (all private — serve via signed URLs).
 
 ## Theming
 
@@ -136,5 +166,21 @@ SVG assets via `AppAssets` (`lib/core/constants/app_assets.dart`):
 | Gemini 2.5 Flash | Clothing tagging, outfit generation, gap analysis | `gemini-2.5-flash` |
 | remove.bg | Background removal | 50 credits/month — cached in `processed-images` |
 | OpenWeather | 5-day forecast for outfit weather-matching | 1000 calls/day free |
-| Supabase | Auth, Postgres DB, Storage | Free project |
-| Razorpay | In-app subscriptions (pro/prime) | Test key: `rzp_test_SMrvLIk3c339gk` |
+| Supabase | Auth, Postgres DB, Storage, Edge Functions | Free project |
+| Razorpay | In-app subscriptions (pro/prime) | Switch to live keys before publish |
+| Firebase Crashlytics | Crash reporting | `google-services.json` gitignored |
+| Firebase Messaging | Push notifications (FCM HTTP v1) | Secret `FIREBASE_SERVICE_ACCOUNT` in Supabase |
+
+## Edge Functions
+
+| Function | Trigger | Purpose |
+|---|---|---|
+| `delete-account` | Client call | Atomic auth + DB + storage deletion |
+| `create-razorpay-order` | Client call | Create Razorpay payment order |
+| `verify-razorpay-payment` | Client call | Verify + update household tier |
+| `send-event-reminders` | Daily cron (9 AM UTC) | FCM reminder for tomorrow's calendar events |
+| `notify-member-joined` | Client call (joinHousehold) | FCM alert to existing household members |
+
+All Edge Functions require `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`. Notification functions also require `FIREBASE_SERVICE_ACCOUNT` (full service account JSON).
+
+Schedule `send-event-reminders` via cron-job.org (POST to `/functions/v1/send-event-reminders` with `Authorization: Bearer <SERVICE_ROLE_KEY>`) or pg_cron + pg_net.
