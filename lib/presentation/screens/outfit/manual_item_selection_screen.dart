@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:shimmer/shimmer.dart';
 
 import '../../../core/utils/error_utils.dart';
+import '../../../router/app_router.dart';
 import '../../../data/models/wardrobe_item.dart';
 import '../../providers/outfit_provider.dart';
 
@@ -66,7 +67,7 @@ class _ManualItemSelectionScreenState
         eventDate: notifier.lastEventDate,
         pinnedItemsByProfile: pinnedMap.isEmpty ? null : pinnedMap,
       );
-      if (mounted) context.pop();
+      if (mounted) context.pushReplacement(AppRoutes.outfitResult);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)

@@ -18,12 +18,14 @@ class WardrobeScreen extends ConsumerWidget {
     super.key,
     required this.profileId,
     this.showProfileSwitcher = false,
+    this.embeddedInHome = false,
     this.profiles = const [],
     this.onProfileChanged,
   });
 
   final String profileId;
   final bool showProfileSwitcher;
+  final bool embeddedInHome;
   final List<Profile> profiles;
   final ValueChanged<String>? onProfileChanged;
 
@@ -152,11 +154,14 @@ class WardrobeScreen extends ConsumerWidget {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () =>
-            context.push(AppRoutes.addItemPath(profileId)),
-        child: const Icon(Icons.add_a_photo_outlined),
-      ),
+      // When embedded in HomeScreen, the FAB lives on HomeScreen's Scaffold.
+      floatingActionButton: embeddedInHome
+          ? null
+          : FloatingActionButton(
+              onPressed: () =>
+                  context.push(AppRoutes.addItemPath(profileId)),
+              child: const Icon(Icons.add_a_photo_outlined),
+            ),
     );
   }
 }

@@ -16,6 +16,7 @@ import '../../providers/usage_provider.dart';
 import '../wardrobe/wardrobe_screen.dart';
 import '../outfit/style_session_screen.dart';
 import '../calendar/style_calendar_screen.dart';
+import '../../providers/calendar_provider.dart';
 
 // ---------------------------------------------------------------------------
 // Bottom navigation index
@@ -49,6 +50,7 @@ class HomeScreen extends ConsumerWidget {
         index: tabIndex,
         children: tabs,
       ),
+      floatingActionButton: _HomeFab(tabIndex: tabIndex),
       bottomNavigationBar: NavigationBar(
         selectedIndex: tabIndex,
         onDestinationSelected: (i) =>
@@ -129,6 +131,7 @@ class _WardrobeTab extends ConsumerWidget {
         return WardrobeScreen(
           profileId: effectiveId,
           showProfileSwitcher: true,
+          embeddedInHome: true,
           profiles: profiles,
           onProfileChanged: (id) =>
               ref.read(currentProfileIdProvider.notifier).set(id),
@@ -358,6 +361,42 @@ class _MoreTab extends ConsumerWidget {
         ],
       ),
     );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Single FAB for the HomeScreen — one in the tree, avoids Hero tag conflicts
+// ---------------------------------------------------------------------------
+
+class _HomeFab extends ConsumerWidget {
+  const _HomeFab({required this.tabIndex});
+
+  final int tabIndex;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Tab 0: Wardrobe — add a new wardrobe item
+    if (tabIndex == 0) {
+      final profileId = ref.watch(currentProfileIdProvider);
+      if (profileId == null) return const SizedBox.shrink();
+      return FloatingActionButton(
+        heroTag: 'home_fab',
+        onPressed: () => context.push(AppRoutes.addItemPath(profileId)),
+        child: const Icon(Icons.add_a_photo_outlined),
+      );
+    }
+
+    // Tab 2: Calendar — open add-event dialog in the embedded calendar
+    if (tabIndex == 2) {
+      return FloatingActionButton(
+        heroTag: 'home_fab',
+        onPressed: () =>
+            ref.read(calendarAddEventSignalProvider.notifier).trigger(),
+        child: const Icon(Icons.add),
+      );
+    }
+
+    return const SizedBox.shrink();
   }
 }
 

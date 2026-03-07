@@ -109,6 +109,17 @@ final calendarProvider =
   CalendarNotifier.new,
 );
 
+/// Incremented by HomeScreen's calendar FAB to signal the embedded
+/// StyleCalendarScreen to open its add-event dialog.
+class _SignalNotifier extends Notifier<int> {
+  @override
+  int build() => 0;
+  void trigger() => state++;
+}
+
+final calendarAddEventSignalProvider =
+    NotifierProvider<_SignalNotifier, int>(_SignalNotifier.new);
+
 /// A derived provider that converts events to a map for TableCalendar.
 final calendarEventsMapProvider =
     Provider<Map<DateTime, List<CalendarEvent>>>((ref) {

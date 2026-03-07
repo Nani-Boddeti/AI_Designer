@@ -127,14 +127,15 @@ class _StyleCalendarScreenState
       ],
     );
 
+    // When embedded in HomeScreen, the FAB lives on HomeScreen's Scaffold.
+    // Listen to the signal provider so HomeScreen can trigger the dialog.
     if (widget.embeddedInHome) {
+      ref.listen(calendarAddEventSignalProvider, (prev, next) {
+        if (mounted) _showAddEventDialog(_selectedDay ?? DateTime.now());
+      });
       return Scaffold(
         appBar: AppBar(title: const Text('Style Calendar')),
         body: body,
-        floatingActionButton: FloatingActionButton(
-          onPressed: () => _showAddEventDialog(_selectedDay ?? DateTime.now()),
-          child: const Icon(Icons.add),
-        ),
       );
     }
 
