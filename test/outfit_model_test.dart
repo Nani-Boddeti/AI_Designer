@@ -86,7 +86,7 @@ void main() {
     test('item_ids with mixed int/string values → all converted to string', () {
       final json = {..._minimalJson(), 'item_ids': ['item-1', 'item-2']};
       final ids = Outfit.fromJson(json).itemIds;
-      expect(ids.every((id) => id is String), isTrue);
+      expect(ids, ['item-1', 'item-2']);
     });
 
     test('single item_ids entry', () {

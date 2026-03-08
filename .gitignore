@@ -57,3 +57,4 @@ lib/firebase_options.dart
 pubspec.lock
 build/
 build_apk.sh
+.github/

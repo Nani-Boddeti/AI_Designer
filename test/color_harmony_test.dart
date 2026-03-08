@@ -11,34 +11,34 @@ void main() {
   group('ColorHarmony.parseHex', () {
     test('6-char hex without # → correct color', () {
       final color = ColorHarmony.parseHex('FF0000');
-      expect(color.red, 255);
-      expect(color.green, 0);
-      expect(color.blue, 0);
+      expect((color.r * 255.0).round().clamp(0, 255), 255);
+      expect((color.g * 255.0).round().clamp(0, 255), 0);
+      expect((color.b * 255.0).round().clamp(0, 255), 0);
     });
 
     test('6-char hex with # → correct color', () {
       final color = ColorHarmony.parseHex('#0000FF');
-      expect(color.red, 0);
-      expect(color.green, 0);
-      expect(color.blue, 255);
+      expect((color.r * 255.0).round().clamp(0, 255), 0);
+      expect((color.g * 255.0).round().clamp(0, 255), 0);
+      expect((color.b * 255.0).round().clamp(0, 255), 255);
     });
 
     test('lowercase hex → parsed correctly', () {
       final color = ColorHarmony.parseHex('#00ff00');
-      expect(color.green, 255);
+      expect((color.g * 255.0).round().clamp(0, 255), 255);
     });
 
     test('8-char hex (AARRGGBB) → parsed correctly', () {
       // FFFF0000 = full alpha, red=255, green=0, blue=0
       final color = ColorHarmony.parseHex('FFFF0000');
-      expect(color.red, 255);
-      expect(color.green, 0);
-      expect(color.blue, 0);
+      expect((color.r * 255.0).round().clamp(0, 255), 255);
+      expect((color.g * 255.0).round().clamp(0, 255), 0);
+      expect((color.b * 255.0).round().clamp(0, 255), 0);
     });
 
     test('8-char hex with partial alpha', () {
       final color = ColorHarmony.parseHex('80FFFFFF');
-      expect(color.alpha, 128); // 0x80
+      expect((color.a * 255.0).round().clamp(0, 255), 128); // 0x80
     });
 
     test('invalid hex → Colors.grey', () {
@@ -55,21 +55,21 @@ void main() {
 
     test('black #000000', () {
       final color = ColorHarmony.parseHex('#000000');
-      expect(color.red, 0);
-      expect(color.green, 0);
-      expect(color.blue, 0);
+      expect((color.r * 255.0).round().clamp(0, 255), 0);
+      expect((color.g * 255.0).round().clamp(0, 255), 0);
+      expect((color.b * 255.0).round().clamp(0, 255), 0);
     });
 
     test('white #FFFFFF', () {
       final color = ColorHarmony.parseHex('#FFFFFF');
-      expect(color.red, 255);
-      expect(color.green, 255);
-      expect(color.blue, 255);
+      expect((color.r * 255.0).round().clamp(0, 255), 255);
+      expect((color.g * 255.0).round().clamp(0, 255), 255);
+      expect((color.b * 255.0).round().clamp(0, 255), 255);
     });
 
     test('whitespace stripped around hex', () {
       final color = ColorHarmony.parseHex('  #FF0000  ');
-      expect(color.red, 255);
+      expect((color.r * 255.0).round().clamp(0, 255), 255);
     });
   });
 

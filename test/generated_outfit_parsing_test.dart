@@ -196,7 +196,6 @@ void main() {
       final raw = {..._fullRaw(), 'item_ids': [1, 2, 3]};
       final ids = _parse(raw).outfit.itemIds;
       expect(ids, ['1', '2', '3']);
-      expect(ids.every((id) => id is String), isTrue);
     });
 
     test('list with mixed types → all coerced to strings', () {
