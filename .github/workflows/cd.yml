@@ -1,79 +1,79 @@
-name: CD — Build & Release APK                                                                                                                                                                      
-                                         
-  on:                                                                                                                                                                                                 
-    push:                                                   
-      tags:                                                                                                                                                                                           
-        - 'v*'   # triggers on v1.0.0, v1.1.0, etc.         
+name: CD — Build & Release APK
 
-  jobs:
-    build:
-      name: Build Release APK
-      runs-on: ubuntu-latest
+on:
+  push:
+    tags:
+      - 'v*'   # triggers on v1.0.0, v1.1.0, etc.
 
-      steps:
-        - uses: actions/checkout@v4
+jobs:
+  build:
+    name: Build Release APK
+    runs-on: ubuntu-latest
 
-        - name: Set up Flutter
-          uses: subosito/flutter-action@v2
-          with:
-            flutter-version: '3.41.2'
-            channel: stable
-            cache: true
+    steps:
+      - uses: actions/checkout@v4
 
-        - name: Install dependencies
-          run: flutter pub get
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.2'
+          channel: stable
+          cache: true
 
-        - name: Analyze
-          run: flutter analyze --fatal-infos
+      - name: Install dependencies
+        run: flutter pub get
 
-        - name: Run tests
-          run: flutter test
+      - name: Analyze
+        run: flutter analyze --fatal-infos
 
-        # ── Secrets setup ──────────────────────────────────────────────────────
+      - name: Run tests
+        run: flutter test
 
-        - name: Decode keystore
-          run: |
-            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/keystore.jks
+      # ── Secrets setup ──────────────────────────────────────────────────────
 
-        - name: Decode google-services.json
-          run: |
-            echo "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" | base64 -d > android/app/google-services.json
+      - name: Decode keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/keystore.jks
 
-        # ── Build ──────────────────────────────────────────────────────────────
+      - name: Decode google-services.json
+        run: |
+          echo "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" | base64 -d > android/app/google-services.json
 
-        - name: Build release APK
-          env:
-            KEYSTORE_PATH: keystore.jks
-            STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
-            KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-            KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-          run: |
-            flutter build apk --release \
-              --dart-define=SUPABASE_URL="${{ secrets.SUPABASE_URL }}" \
-              --dart-define=SUPABASE_ANON_KEY="${{ secrets.SUPABASE_ANON_KEY }}" \
-              --dart-define=GEMINI_API_KEY="${{ secrets.GEMINI_API_KEY }}" \
-              --dart-define=REMOVE_BG_API_KEY="${{ secrets.REMOVE_BG_API_KEY }}" \
-              --dart-define=OPENWEATHER_API_KEY="${{ secrets.OPENWEATHER_API_KEY }}" \
-              --dart-define=RAZORPAY_KEY_ID="${{ secrets.RAZORPAY_KEY_ID }}"
+      # ── Build ──────────────────────────────────────────────────────────────
 
-        # ── Publish ────────────────────────────────────────────────────────────
+      - name: Build release APK
+        env:
+          KEYSTORE_PATH: keystore.jks
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          flutter build apk --release \
+            --dart-define=SUPABASE_URL="${{ secrets.SUPABASE_URL }}" \
+            --dart-define=SUPABASE_ANON_KEY="${{ secrets.SUPABASE_ANON_KEY }}" \
+            --dart-define=GEMINI_API_KEY="${{ secrets.GEMINI_API_KEY }}" \
+            --dart-define=REMOVE_BG_API_KEY="${{ secrets.REMOVE_BG_API_KEY }}" \
+            --dart-define=OPENWEATHER_API_KEY="${{ secrets.OPENWEATHER_API_KEY }}" \
+            --dart-define=RAZORPAY_KEY_ID="${{ secrets.RAZORPAY_KEY_ID }}"
 
-        - name: Upload APK artifact
-          uses: actions/upload-artifact@v4
-          with:
-            name: release-apk-${{ github.ref_name }}
-            path: build/app/outputs/flutter-apk/app-release.apk
-            retention-days: 30
+      # ── Publish ────────────────────────────────────────────────────────────
 
-        - name: Create GitHub Release
-          uses: softprops/action-gh-release@v2
-          with:
-            name: VibeVault ${{ github.ref_name }}
-            body: |
-              ## What's new
-              _Add release notes here or use GitHub's auto-generate feature._
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk-${{ github.ref_name }}
+          path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30
 
-              ## Installation
-              Download `app-release.apk` below and install on your Android device.
-            files: build/app/outputs/flutter-apk/app-release.apk
-            draft: true
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: VibeVault ${{ github.ref_name }}
+          body: |
+            ## What's new
+            _Add release notes here or use GitHub's auto-generate feature._
+
+            ## Installation
+            Download `app-release.apk` below and install on your Android device.
+          files: build/app/outputs/flutter-apk/app-release.apk
+          draft: true
