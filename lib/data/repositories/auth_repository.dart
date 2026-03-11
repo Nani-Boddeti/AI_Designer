@@ -148,7 +148,17 @@ class AuthRepository {
           if (skinTone != null) 'skin_tone': skinTone.value,
         });
 
-    // Step 3: Both rows are now committed. current_household_id() works.
+    // Step 3: Insert membership row + persist active household in user_preferences.
+    // user_preferences drives current_household_id() so RLS works for all
+    // subsequent wardrobe / outfit queries.
+    await _client.from('household_memberships').insert({
+      'user_id': user.id,
+      'household_id': householdId,
+      'is_admin': true,
+    });
+    await _service.upsertActiveHousehold(user.id, householdId);
+
+    // Step 4: Both rows are now committed. current_household_id() works.
     // Fetch household and profile in parallel.
     final results = await Future.wait([
       _client.from(SupabaseTables.households).select().eq('id', householdId).single(),
@@ -189,6 +199,14 @@ class AuthRepository {
           'fit_preferences': <String, dynamic>{},
           if (skinTone != null) 'skin_tone': skinTone.value,
         });
+
+    // Insert membership row + persist active household in user_preferences.
+    await _client.from('household_memberships').insert({
+      'user_id': user.id,
+      'household_id': household.id,
+      'is_admin': false,
+    });
+    await _service.upsertActiveHousehold(user.id, household.id);
 
     // Profile is committed — current_household_id() now works.
     final profileData = await _client

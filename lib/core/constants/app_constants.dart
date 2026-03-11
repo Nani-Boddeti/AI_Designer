@@ -32,6 +32,7 @@ class SupabaseBuckets {
 enum WardrobeCategory {
   top,
   bottom,
+  fullSet,
   shoes,
   accessory,
   outerwear,
@@ -40,31 +41,121 @@ enum WardrobeCategory {
 
   String get displayName {
     switch (this) {
-      case WardrobeCategory.top:
-        return 'Top';
-      case WardrobeCategory.bottom:
-        return 'Bottom';
-      case WardrobeCategory.shoes:
-        return 'Shoes';
-      case WardrobeCategory.accessory:
-        return 'Accessory';
-      case WardrobeCategory.outerwear:
-        return 'Outerwear';
-      case WardrobeCategory.dress:
-        return 'Dress';
-      case WardrobeCategory.swimwear:
-        return 'Swimwear';
+      case WardrobeCategory.top:       return 'Top';
+      case WardrobeCategory.bottom:    return 'Bottom';
+      case WardrobeCategory.fullSet:   return 'Full Set';
+      case WardrobeCategory.shoes:     return 'Shoes';
+      case WardrobeCategory.accessory: return 'Accessory';
+      case WardrobeCategory.outerwear: return 'Outerwear';
+      case WardrobeCategory.dress:     return 'Dress';
+      case WardrobeCategory.swimwear:  return 'Swimwear';
     }
   }
 
   String get value => name;
 
   static WardrobeCategory fromString(String value) {
+    final v = value.toLowerCase().trim();
+    // handle legacy snake_case and camelCase variants
+    if (v == 'full_set' || v == 'fullset') return WardrobeCategory.fullSet;
     return WardrobeCategory.values.firstWhere(
-      (e) => e.name == value.toLowerCase().trim(),
+      (e) => e.name.toLowerCase() == v,
       orElse: () => WardrobeCategory.top,
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// Indian wardrobe subcategories (per WardrobeCategory)
+// ---------------------------------------------------------------------------
+class WardrobeSubcategories {
+  WardrobeSubcategories._();
+
+  static const Map<WardrobeCategory, List<String>> byCategory = {
+    WardrobeCategory.top: [
+      'Kurta',
+      'Kurti',
+      'Tunic',
+      'Shirt',
+      'Blouse',
+      'Saree Blouse',
+      'Crop Top',
+      'Sherwani Top',
+      'T-Shirt',
+      'Sweatshirt',
+    ],
+    WardrobeCategory.bottom: [
+      'Salwar',
+      'Churidar',
+      'Palazzo',
+      'Lehenga Skirt',
+      'Dhoti Pants',
+      'Trousers',
+      'Jeans',
+      'Skirt',
+      'Shorts',
+    ],
+    WardrobeCategory.fullSet: [
+      'Saree',
+      'Lehenga Set',
+      'Salwar Suit',
+      'Anarkali',
+      'Co-ord Set',
+      'Jumpsuit',
+      'Sherwani Set',
+      'Sharara Set',
+      'Gharara Set',
+    ],
+    WardrobeCategory.dress: [
+      'Maxi Dress',
+      'Mini Dress',
+      'Midi Dress',
+      'Wrap Dress',
+      'Bodycon',
+      'A-line',
+    ],
+    WardrobeCategory.shoes: [
+      'Juttis',
+      'Kolhapuri',
+      'Mojari',
+      'Heels',
+      'Flats',
+      'Sneakers',
+      'Sandals',
+      'Boots',
+      'Loafers',
+    ],
+    WardrobeCategory.accessory: [
+      'Dupatta',
+      'Stole',
+      'Bangles',
+      'Necklace',
+      'Maang Tikka',
+      'Earrings',
+      'Clutch',
+      'Belt',
+      'Watch',
+      'Sunglasses',
+      'Scarf',
+    ],
+    WardrobeCategory.outerwear: [
+      'Jacket',
+      'Shrug',
+      'Blazer',
+      'Nehru Jacket',
+      'Cape',
+      'Coat',
+      'Hoodie',
+    ],
+    WardrobeCategory.swimwear: [
+      'Swimsuit',
+      'Bikini',
+      'Cover-up',
+    ],
+  };
+
+  static List<String> forCategory(WardrobeCategory category) =>
+      byCategory[category] ?? const [];
 }
 
 // ---------------------------------------------------------------------------
@@ -153,21 +244,21 @@ class StylePersonas {
   StylePersonas._();
 
   static const List<String> all = [
-    'Classic',
+    'Classic Ethnic',
+    'Modern Fusion',
     'Casual',
-    'Sporty',
-    'Bohemian',
-    'Preppy',
-    'Edgy',
-    'Romantic',
-    'Minimalist',
-    'Streetwear',
+    'Festive / Glam',
     'Business Casual',
-    'Glam',
+    'Minimal Chic',
+    'Romantic',
+    'Bohemian',
+    'Sporty',
+    'Streetwear',
+    'Traditional',
     'Vintage',
-    'Cottagecore',
     'Athleisure',
-    'Tropical',
+    'Royal / Bridal',
+    'Indo-Western',
   ];
 }
 
@@ -202,23 +293,26 @@ class OccasionOptions {
   OccasionOptions._();
 
   static const List<String> all = [
-    'Everyday',
+    'Casual / Everyday',
     'Work / Office',
-    'School',
-    'Church / Worship',
+    'School / College',
     'Wedding',
-    'Birthday Party',
+    'Engagement',
+    'Mehndi',
+    'Sangeet',
+    'Diwali',
+    'Holi',
+    'Navratri',
+    'Eid',
+    'Puja / Temple',
     'Family Function',
+    'Birthday Party',
     'Friends Meet',
-    'Beach / Vacation',
-    'Formal Event',
     'Date Night',
-    'Holiday Photos',
+    'Formal Event',
+    'Travel / Vacation',
     'Sports / Outdoor',
-    'Festival',
-    'Funeral',
     'Baby Shower',
-    'Reunion',
   ];
 }
 

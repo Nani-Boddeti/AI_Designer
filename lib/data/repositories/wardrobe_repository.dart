@@ -106,7 +106,9 @@ class WardrobeRepository {
   Future<WardrobeItem> addItem({
     required String profileId,
     required Uint8List imageBytes,
+    String? subcategory,
     bool isPrivate = false,
+    bool removeBackground = true,
     void Function(String step)? onStep,
   }) async {
     final itemId = const Uuid().v4();
@@ -120,18 +122,22 @@ class WardrobeRepository {
       minHeight: 800,
     );
 
-    // Step 2: Remove background
-    onStep?.call('Removing background…');
+    // Step 2: Remove background (optional — user may choose to keep original)
     Uint8List? processedBytes;
-    try {
-      processedBytes = await bgRemovalService.removeBackground(
-        Uint8List.fromList(compressed),
-      );
-    } catch (e, stack) {
-      // Background removal is optional; proceed without it.
-      FirebaseCrashlytics.instance
-          .recordError(e, stack, reason: 'bg-removal-failed', fatal: false);
-      onStep?.call('Background removal skipped — saving original');
+    if (removeBackground) {
+      onStep?.call('Removing background…');
+      try {
+        processedBytes = await bgRemovalService.removeBackground(
+          Uint8List.fromList(compressed),
+        );
+      } catch (e, stack) {
+        // Background removal is optional; proceed without it.
+        FirebaseCrashlytics.instance
+            .recordError(e, stack, reason: 'bg-removal-failed', fatal: false);
+        onStep?.call('Background removal skipped — saving original');
+      }
+    } else {
+      onStep?.call('Keeping original background…');
     }
 
     // Step 3: AI tagging
@@ -183,8 +189,12 @@ class WardrobeRepository {
       'image_url': imageUrl,
       // ignore: use_null_aware_elements
       if (processedImageUrl != null) 'processed_image_url': processedImageUrl,
+      // ignore: use_null_aware_elements
       if (tags['brand'] != null) 'brand': tags['brand'],
+      // ignore: use_null_aware_elements
       if (tags['description'] != null) 'ai_description': tags['description'],
+      // ignore: use_null_aware_elements
+      if (subcategory != null) 'subcategory': subcategory,
       'is_private': isPrivate,
     };
 

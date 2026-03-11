@@ -91,6 +91,16 @@ await SharePlus.instance.share(ShareParams(files: [...], subject: '...'));
 // Not: Share.shareXFiles(...)
 ```
 
+### In-app review
+- `ReviewService.requestIfEligible()` — one-shot (SharedPreferences key `review_requested`); called after first successful "Save All" in `OutfitResultScreen`
+
+### Screenshot / share outfit
+```dart
+// Capture widget to bytes, then share via share_plus
+final image = await screenshotController.capture();
+await SharePlus.instance.share(ShareParams(files: [XFile.fromData(image!)], subject: '...'));
+```
+
 ### Other conventions
 - **List spreads**: `<Type>[...(list ?? <Type>[])]` — avoid `List<dynamic>` inference
 - **Calendar DATE**: `.toIso8601String().split('T').first`

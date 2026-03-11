@@ -28,6 +28,7 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
   Uint8List? _imageBytes;
   bool _isProcessing = false;
   bool _isPrivate = false;
+  bool _removeBackground = true;
   String _step = '';
   String? _errorMessage;
   WardrobeItem? _result;
@@ -53,7 +54,7 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
             'third-party AI services:\n\n'
             '• Google Gemini — automatically tags the item\'s category, '
             'colors, and style.\n\n'
-            '• remove.bg — removes the background for a cleaner wardrobe view.\n\n'
+            '• rembg — removes the background for a cleaner wardrobe view.\n\n'
             'Photos are sent securely and are not stored by these services '
             'after processing. By continuing you agree to this use.',
           ),
@@ -122,10 +123,68 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
       return;
     }
 
-    await _processBatch(picked);
+    // Show batch options before processing.
+    if (!mounted) return;
+    final options = await _showBatchOptionsDialog(picked.length);
+    if (options == null) return; // user cancelled
+
+    await _processBatch(
+      picked,
+      isPrivate: options.$1,
+      removeBackground: options.$2,
+    );
   }
 
-  Future<void> _processBatch(List<XFile> files) async {
+  /// Returns (isPrivate, removeBackground) or null if cancelled.
+  Future<(bool, bool)?> _showBatchOptionsDialog(int count) async {
+    bool isPrivate = false;
+    bool removeBg = true;
+    return showDialog<(bool, bool)>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          title: Text('Add $count Items'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.lock_outline),
+                title: const Text('Private items'),
+                subtitle: const Text('Hide from household members'),
+                value: isPrivate,
+                onChanged: (v) => setS(() => isPrivate = v),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.auto_fix_high_outlined),
+                title: const Text('Remove background'),
+                subtitle: const Text('Cleaner wardrobe view'),
+                value: removeBg,
+                onChanged: (v) => setS(() => removeBg = v),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, (isPrivate, removeBg)),
+              child: const Text('Add All'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _processBatch(
+    List<XFile> files, {
+    bool isPrivate = false,
+    bool removeBackground = true,
+  }) async {
     final notifier = ref.read(wardrobeProvider(widget.profileId).notifier);
     final currentNotifier = ValueNotifier<int>(0);
     int succeeded = 0;
@@ -147,7 +206,11 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
         currentNotifier.value = i + 1;
         try {
           final bytes = await files[i].readAsBytes();
-          await notifier.addItem(bytes, isPrivate: false);
+          await notifier.addItem(
+            bytes,
+            isPrivate: isPrivate,
+            removeBackground: removeBackground,
+          );
           succeeded++;
         } catch (_) {
           // Continue with remaining items.
@@ -253,7 +316,11 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
       // For simplicity, we trigger the pipeline and update step from the notifier.
       _startStepPolling();
 
-      final item = await notifier.addItem(_imageBytes!, isPrivate: _isPrivate);
+      final item = await notifier.addItem(
+        _imageBytes!,
+        isPrivate: _isPrivate,
+        removeBackground: _removeBackground,
+      );
 
       setState(() {
         _result = item;
@@ -368,6 +435,14 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
                   subtitle: const Text('Hide from other household members'),
                   value: _isPrivate,
                   onChanged: (v) => setState(() => _isPrivate = v),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  secondary: const Icon(Icons.auto_fix_high_outlined),
+                  title: const Text('Remove background'),
+                  subtitle: const Text('Cleaner wardrobe view'),
+                  value: _removeBackground,
+                  onChanged: (v) => setState(() => _removeBackground = v),
                 ),
                 const SizedBox(height: 8),
                 FilledButton.icon(

@@ -7,6 +7,7 @@ class WardrobeItem {
     required this.profileId,
     required this.name,
     required this.category,
+    this.subcategory,
     this.colors = const [],
     this.colorNames = const [],
     this.styleTags = const [],
@@ -24,6 +25,9 @@ class WardrobeItem {
   final String profileId;
   final String name;
   final WardrobeCategory category;
+
+  /// Indian subcategory (e.g. 'Kurta', 'Saree', 'Juttis').
+  final String? subcategory;
 
   /// Hex color strings (e.g. "#FF5733").
   final List<String> colors;
@@ -62,6 +66,7 @@ class WardrobeItem {
       name: json['name'] as String,
       category: WardrobeCategory.fromString(
           json['category'] as String? ?? 'top'),
+      subcategory: json['subcategory'] as String?,
       colors: (json['colors'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??
@@ -94,6 +99,7 @@ class WardrobeItem {
       'profile_id': profileId,
       'name': name,
       'category': category.value,
+      if (subcategory != null) 'subcategory': subcategory,
       'colors': colors,
       'color_names': colorNames,
       'style_tags': styleTags,
@@ -113,6 +119,7 @@ class WardrobeItem {
     String? profileId,
     String? name,
     WardrobeCategory? category,
+    String? subcategory,
     List<String>? colors,
     List<String>? colorNames,
     List<String>? styleTags,
@@ -130,6 +137,7 @@ class WardrobeItem {
       profileId: profileId ?? this.profileId,
       name: name ?? this.name,
       category: category ?? this.category,
+      subcategory: subcategory ?? this.subcategory,
       colors: colors ?? this.colors,
       colorNames: colorNames ?? this.colorNames,
       styleTags: styleTags ?? this.styleTags,

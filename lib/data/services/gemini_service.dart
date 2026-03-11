@@ -48,40 +48,42 @@ class GeminiService {
   ///   style_tags (List), season_tags (List), brand, description
   Future<Map<String, dynamic>> tagWardrobeItem(Uint8List imageBytes) async {
     const prompt = '''
-You are a professional fashion stylist and clothing analyst.
+You are a professional Indian fashion stylist and clothing analyst specialising in Indian ethnic and fusion wear.
 Carefully examine the image and identify the clothing item or the most prominent clothing item shown.
 
 CATEGORY DEFINITIONS — pick the single best match:
-  "top"       → shirts, t-shirts, blouses, tanks, crop tops, sweaters, hoodies, cardigans, polo shirts
-  "bottom"    → pants, jeans, trousers, shorts, skirts, leggings, culottes
-  "dress"     → one-piece dresses, jumpsuits, rompers, co-ord sets worn as one piece
-  "outerwear" → jackets, coats, blazers, parkas, windbreakers, bombers, vests
-  "shoes"     → sneakers, boots, heels, sandals, loafers, any footwear
-  "accessory" → bags, belts, scarves, hats, caps, sunglasses, jewelry, watches, ties
-  "swimwear"  → swimsuits, bikinis, swim trunks, rash guards
+  "top"       → Kurta, Kurti, Tunic, Shirt, Blouse, Saree Blouse, Crop Top, Sherwani Top, T-Shirt, Sweatshirt, any upper-body garment
+  "bottom"    → Salwar, Churidar, Palazzo, Lehenga Skirt, Dhoti Pants, Trousers, Jeans, Skirt, Shorts, any lower-body garment
+  "fullSet"   → Saree (with or without blouse), Lehenga Set (skirt+blouse+dupatta), Salwar Suit (3-piece), Anarkali, Co-ord Set, Jumpsuit, Sherwani Set, Sharara Set, Gharara Set — i.e. a COMPLETE outfit sold/worn as one unit
+  "dress"     → Western one-piece dress, romper, mini/midi/maxi dress
+  "outerwear" → Jacket, Shrug, Blazer, Nehru Jacket, Cape, Coat, Hoodie
+  "shoes"     → Juttis, Kolhapuri, Mojari, Heels, Flats, Sneakers, Sandals, Boots, any footwear
+  "accessory" → Dupatta, Stole, Bangles, Necklace, Maang Tikka, Earrings, Clutch, Belt, Watch, Sunglasses, Scarf, any accessory
+  "swimwear"  → Swimsuit, Bikini, Cover-up, Swim trunks
+
+SAREE RULE: A draped Saree on a person = "fullSet". A folded/undrped Saree fabric alone = "fullSet".
+DUPATTA RULE: A standalone Dupatta or stole = "accessory". When part of a Salwar Suit = "fullSet".
 
 FULL-OUTFIT PHOTOS: If the image shows a complete outfit on a person or mannequin,
 identify the SINGLE item that visually dominates the frame (largest area, most detailed).
-Do NOT default to "top" just because a shirt is present — look at the whole image and
-pick the category of the item being most prominently featured.
 
 Return a JSON object with exactly these fields (no markdown fences):
 {
-  "name": "<concise item name, e.g. 'High-Waist Slim Jeans' or 'Floral Wrap Dress'>",
+  "name": "<concise Indian item name, e.g. 'Chikankari Embroidered Kurti' or 'Banarasi Silk Saree'>",
   "category": "<exactly one lowercase value from the list above>",
   "colors": ["<dominant hex color e.g. #1A2B3C>", "<secondary hex if clearly present>"],
   "color_names": ["<human color name>", "<second color name if any>"],
   "style_tags": ["<tag1>", "<tag2>", "<tag3>"],
   "season_tags": ["<one or more of: Spring, Summer, Fall, Winter, All-Season>"],
   "brand": "<brand name if a logo or label is clearly visible, else null>",
-  "description": "<2-sentence styling description of this specific item>"
+  "description": "<2-sentence styling description highlighting the Indian craft, fabric, or occasion suitability>"
 }
 
 Rules:
-- category MUST be lowercase and exactly one of the seven values defined above.
-- colors: valid 6-digit hex strings with a leading # character.
-- style_tags: 3–6 specific fashion descriptors (e.g. "slim fit", "floral print", "midi length").
-- season_tags: at least one season value.
+- category MUST be exactly one of the eight values defined above (use camelCase for fullSet).
+- Recognise Indian embroidery/craft names: Chikankari, Zardozi, Phulkari, Bandhani, Block Print, Kantha, Kalamkari, Ikat, Banarasi, Kanjeevaram, Chanderi, Lucknowi.
+- style_tags: 3–6 descriptors e.g. "ethnic wear", "embroidered yoke", "tunic length", "relaxed fit", "festival wear", "Chikankari embroidery".
+- season_tags: Indian climate — prefer "Summer", "All-Season", "Winter" as applicable.
 ''';
 
     final content = [
@@ -137,7 +139,8 @@ Rules:
     }).toList();
 
     final prompt = '''
-You are an expert family fashion coordinator. Create a coordinated outfit for each family member for the given occasion.
+You are an expert Indian family fashion coordinator who deeply understands Indian ethnic and fusion wear.
+Create a coordinated outfit for each family member for the given occasion.
 
 OCCASION: $occasion
 WEATHER: $weatherDesc
@@ -154,6 +157,24 @@ Requirements:
 - If weather data is given, choose weather-appropriate items.
 - Write a short, friendly styling note for each person.
 
+INDIAN GARMENT LAYERING RULES — strictly follow these:
+1. Saree (fullSet) is complete on its own — pair with matching Blouse (top) from wardrobe if available. Do not add bottoms.
+2. Kurta/Kurti (top) pairs with Salwar/Churidar/Palazzo (bottom). Add Dupatta (accessory) if available.
+3. Lehenga Set (fullSet) is complete — do not add separate bottoms or tops.
+4. Salwar Suit (fullSet) is complete on its own.
+5. Anarkali (fullSet) is complete — may pair with a belt (accessory) optionally.
+6. Sherwani Set (fullSet) for men — complete on its own, add Mojari/Jutti (shoes) if available.
+7. Never combine fullSet + bottom (e.g., Saree + Jeans is culturally incorrect).
+8. Dupatta should be suggested as an accessory when Kurta/Kurti is the top, especially for weddings, festivals, puja.
+9. For Indian festivals (Diwali, Navratri, Eid, Wedding, Mehndi, Sangeet, Puja): strongly prefer ethnic wear over western.
+10. For casual/office: fusion (Kurti + trousers/jeans) is acceptable.
+
+OCCASION-SPECIFIC GUIDANCE:
+- Wedding/Mehndi/Sangeet/Eid/Navratri/Diwali/Puja → Saree, Lehenga, Anarkali, Salwar Suit preferred
+- Office/Work → Kurti + Palazzo/Churidar, or fusion Kurti + trousers
+- Casual/Everyday → Kurti, casual Kurta, or western wear
+- Family Function/Birthday → Ethnic or smart fusion
+
 Return a JSON array — TWO objects per family member (variant 1 and variant 2) — with this shape:
 [
   {
@@ -161,14 +182,23 @@ Return a JSON array — TWO objects per family member (variant 1 and variant 2) 
     "profile_name": "<name>",
     "variant_number": 1,
     "item_ids": ["<wardrobe item id>", ...],
-    "styling_note": "<short note>",
+    "styling_note": "<short, warm styling note mentioning the Indian garment and occasion>",
     "harmony_score": <0.0-1.0 float>
   }
 ]
 
-Variant 1 = best coordinated pick. Variant 2 = a distinctly different color/silhouette combination.
+Variant 1 = best coordinated ethnic/occasion-appropriate pick.
+Variant 2 = a distinctly different color/silhouette combination (or fusion alternative if ethnic not available).
 Never repeat the same item_id combination between variants for the same profile.
 Total objects = number of profiles × 2.
+
+HARMONY SCORE RULES:
+- Reflect ACTUAL color compatibility between the selected items, not just general outfit quality.
+- Scores above 0.92 are RARE — reserve for truly perfect complementary color combinations.
+- A typical good outfit scores 0.70–0.85; an excellent outfit 0.85–0.92.
+- Variant 1 should generally score higher than Variant 2.
+- Score below 0.60 if colors clash significantly.
+- Never give both variants the same score for the same profile.
 
 Return ONLY the JSON array, no markdown fences.
 ''';
@@ -192,7 +222,7 @@ Return ONLY the JSON array, no markdown fences.
     required List<Map<String, dynamic>> items,
   }) async {
     final prompt = '''
-You are a personal stylist. Analyse this wardrobe and identify the most impactful missing items.
+You are a personal Indian fashion stylist. Analyse this wardrobe and identify the most impactful missing items for an Indian wardrobe.
 
 PERSON:
 - Age group: ${profile.ageGroup.displayName}
@@ -207,17 +237,25 @@ ${jsonEncode(items.map((i) => {
           'style_tags': i['style_tags'],
         }).toList())}
 
-Task: Identify 4–6 wardrobe gaps and suggest specific items to purchase.
+Task: Identify 4–6 wardrobe gaps and suggest specific Indian or fusion items to purchase.
 
-Return a JSON array with this shape:
+INDIAN WARDROBE ESSENTIALS TO CHECK FOR:
+- At least one Dupatta/Stole (accessory) — essential for completing ethnic looks
+- At least one ethnic footwear (Juttis, Kolhapuri, or Mojari for Indian occasions)
+- A versatile Kurti or Salwar Suit for office/casual use
+- A festive piece (Anarkali, Lehenga, or Banarasi Saree) for weddings/festivals
+- A Nehru Jacket or ethnic Shrug for layering at formal events (especially men)
+- Neutral/earth-toned Palazzo or Churidar to pair with multiple Kurtis
+
+Return a JSON array with this shape (Indian-focused search queries for Myntra/Ajio/Nykaa Fashion):
 [
   {
-    "item_name": "<specific item name>",
-    "category": "<top|bottom|shoes|accessory|outerwear|dress|swimwear>",
+    "item_name": "<specific Indian item name, e.g. 'Chanderi Silk Kurti'>",
+    "category": "<top|bottom|fullSet|shoes|accessory|outerwear|dress|swimwear>",
     "colors": ["<recommended hex color>"],
     "color_names": ["<color name>"],
-    "reason": "<1-2 sentence explanation>",
-    "search_query": "<optimised shopping search query>"
+    "reason": "<1-2 sentence explanation of why this fills a gap>",
+    "search_query": "<Indian shopping search query e.g. 'Chikankari cotton kurti women' or 'men Nehru jacket silk'>"
   }
 ]
 

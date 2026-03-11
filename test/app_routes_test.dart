@@ -148,6 +148,43 @@ void main() {
   });
 
   // -------------------------------------------------------------------------
+  group('AppRoutes.savedOutfitsPath()', () {
+    test('produces correct path for a given profileId', () {
+      expect(AppRoutes.savedOutfitsPath('abc'), equals('/saved-outfits/abc'));
+    });
+
+    test('path starts with /saved-outfits/', () {
+      expect(AppRoutes.savedOutfitsPath('xyz'), startsWith('/saved-outfits/'));
+    });
+
+    test('handles UUID-style profileId', () {
+      expect(
+        AppRoutes.savedOutfitsPath('550e8400-e29b-41d4-a716-446655440000'),
+        equals('/saved-outfits/550e8400-e29b-41d4-a716-446655440000'),
+      );
+    });
+
+    test('handles empty string id (edge case — no crash)', () {
+      expect(AppRoutes.savedOutfitsPath(''), equals('/saved-outfits/'));
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  group('AppRoutes — multi-household routes', () {
+    test('householdPicker is "/household-picker"', () {
+      expect(AppRoutes.householdPicker, equals('/household-picker'));
+    });
+
+    test('householdPicker is distinct from householdSetup', () {
+      expect(AppRoutes.householdPicker, isNot(equals(AppRoutes.householdSetup)));
+    });
+
+    test('householdPicker starts with "/"', () {
+      expect(AppRoutes.householdPicker, startsWith('/'));
+    });
+  });
+
+  // -------------------------------------------------------------------------
   group('AppRoutes path helpers — consistency checks', () {
     test('wardrobePath, addItemPath and itemDetailPath all share same prefix', () {
       const profileId = 'test-profile';

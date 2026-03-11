@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:table_calendar/table_calendar.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/error_utils.dart';
 import '../../../data/models/calendar_event.dart';
 import '../../../data/models/outfit.dart';
@@ -55,73 +56,105 @@ class _StyleCalendarScreenState
               _selectedDay = selected;
               _focusedDay = focused;
             });
+            // Only open detail sheet when the tapped day has actual events.
+            final dayEvents = _getEventsForDay(selected);
+            if (dayEvents.isNotEmpty) {
+              _showDayEventsSheet(selected, dayEvents);
+            }
           },
-          calendarStyle: CalendarStyle(
+          rowHeight: 72,
+          calendarStyle: const CalendarStyle(
+            outsideDaysVisible: true,
+            outsideTextStyle: TextStyle(color: AppTheme.onSurfaceVar, fontSize: 13),
+            defaultTextStyle: TextStyle(color: AppTheme.onBgColor, fontSize: 13),
+            weekendTextStyle: TextStyle(color: AppTheme.onBgColor, fontSize: 13),
+            weekNumberTextStyle: TextStyle(color: AppTheme.onSurfaceVar, fontSize: 11),
             todayDecoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.4),
+              color: AppTheme.primaryContainer,
               shape: BoxShape.circle,
+            ),
+            todayTextStyle: TextStyle(
+              color: AppTheme.primary,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
             ),
             selectedDecoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary,
+              color: AppTheme.primary,
               shape: BoxShape.circle,
             ),
-            markerDecoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.secondary,
-              shape: BoxShape.circle,
+            selectedTextStyle: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
             ),
+            // Default markers hidden — replaced by calendarBuilders.markerBuilder
+            markersMaxCount: 0,
+          ),
+          headerStyle: HeaderStyle(
+            titleCentered: true,
+            formatButtonVisible: true,
+            titleTextStyle: const TextStyle(
+              color: AppTheme.onBgColor,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+            leftChevronIcon: const Icon(Icons.chevron_left, color: AppTheme.onSurfaceVar),
+            rightChevronIcon: const Icon(Icons.chevron_right, color: AppTheme.onSurfaceVar),
+            formatButtonDecoration: BoxDecoration(
+              border: Border.all(color: AppTheme.dividerColor),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            formatButtonTextStyle: const TextStyle(
+              color: AppTheme.onSurfaceVar,
+              fontSize: 12,
+            ),
+          ),
+          daysOfWeekStyle: const DaysOfWeekStyle(
+            weekdayStyle: TextStyle(
+              color: AppTheme.onSurfaceVar,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+            weekendStyle: TextStyle(
+              color: AppTheme.onSurfaceVar,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          calendarBuilders: CalendarBuilders<CalendarEvent>(
+            markerBuilder: (context, day, events) {
+              if (events.isEmpty) return null;
+              return _DayOutfitMarker(events: events);
+            },
           ),
         ),
 
-        const Divider(height: 1),
+        // Loading/error strip — only shown while data is fetching.
+        eventsAsync.when(
+          loading: () => const LinearProgressIndicator(),
+          error: (e, _) => Padding(
+            padding: const EdgeInsets.all(12),
+            child: Text(userFriendlyError(e),
+                style: const TextStyle(color: AppTheme.onSurfaceVar)),
+          ),
+          data: (_) => const SizedBox.shrink(),
+        ),
 
-        // Events list for selected day
+        // Static hint — always visible below the calendar.
         Expanded(
-          child: eventsAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(child: Text(userFriendlyError(e))),
-            data: (_) {
-              if (_selectedDay == null) {
-                return const Center(
-                  child: Text('Tap a day to view events',
-                      style: TextStyle(color: Colors.grey)),
-                );
-              }
-              final dayEvents = _getEventsForDay(_selectedDay!);
-              if (dayEvents.isEmpty) {
-                return Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('No events on this day',
-                          style: TextStyle(color: Colors.grey)),
-                      const SizedBox(height: 12),
-                      FilledButton.icon(
-                        onPressed: () => _showAddEventDialog(_selectedDay!),
-                        icon: const Icon(Icons.add),
-                        label: const Text('Add Event'),
-                      ),
-                    ],
-                  ),
-                );
-              }
-              return ListView(
-                padding: const EdgeInsets.all(12),
-                children: [
-                  ...dayEvents.map((e) => _EventTile(
-                        event: e,
-                        onDelete: () => ref
-                            .read(calendarProvider.notifier)
-                            .deleteEvent(e.id),
-                      )),
-                  const SizedBox(height: 8),
-                  OutlinedButton.icon(
-                    onPressed: () => _showAddEventDialog(_selectedDay!),
-                    icon: const Icon(Icons.add),
-                    label: const Text('Add Another Event'),
-                  ),
-                ],
-              );
-            },
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.touch_app_outlined,
+                    size: 36, color: AppTheme.onSurfaceVar.withValues(alpha: 0.5)),
+                const SizedBox(height: 10),
+                const Text(
+                  'Tap an event date to view details',
+                  style: TextStyle(color: AppTheme.onSurfaceVar),
+                ),
+              ],
+            ),
           ),
         ),
       ],
@@ -134,7 +167,8 @@ class _StyleCalendarScreenState
         if (mounted) _showAddEventDialog(_selectedDay ?? DateTime.now());
       });
       return Scaffold(
-        appBar: AppBar(title: const Text('Style Calendar')),
+        backgroundColor: AppTheme.scaffoldBg,
+        appBar: AppBar(title: const Text('Style Calendar'), backgroundColor: AppTheme.scaffoldBg),
         body: body,
       );
     }
@@ -155,77 +189,141 @@ class _StyleCalendarScreenState
       builder: (ctx) => _AddEventDialog(date: date),
     );
   }
-}
 
-// ---------------------------------------------------------------------------
-// Event tile
-// ---------------------------------------------------------------------------
-
-class _EventTile extends ConsumerWidget {
-  const _EventTile({required this.event, required this.onDelete});
-
-  final CalendarEvent event;
-  final VoidCallback onDelete;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Card(
-      child: ListTile(
-        leading: const Icon(Icons.event_outlined),
-        title: Text(event.title),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (event.occasion != null) Text('Occasion: ${event.occasion}'),
-            if (event.notes != null)
-              Text(event.notes!,
-                  maxLines: 2, overflow: TextOverflow.ellipsis),
-            if (event.outfitAssignments.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Row(
-                  children: event.outfitAssignments.entries
-                      .map((e) => _OutfitMiniThumb(
-                            profileId: e.key,
-                            outfitId: e.value,
-                          ))
-                      .toList(),
-                ),
-              ),
-          ],
-        ),
-        trailing: IconButton(
-          icon: const Icon(Icons.delete_outline),
-          onPressed: () async {
-            final confirmed = await showDialog<bool>(
-              context: context,
-              builder: (_) => AlertDialog(
-                title: const Text('Delete Event?'),
-                actions: [
-                  TextButton(
-                      onPressed: () => Navigator.pop(context, false),
-                      child: const Text('Cancel')),
-                  FilledButton(
-                      onPressed: () => Navigator.pop(context, true),
-                      child: const Text('Delete')),
-                ],
-              ),
-            );
-            if (confirmed == true) onDelete();
-          },
-        ),
-        onTap: () => _showEventDetail(context, ref),
-        isThreeLine: event.occasion != null && event.notes != null,
-      ),
-    );
-  }
-
-  void _showEventDetail(BuildContext context, WidgetRef ref) {
+  /// Always shows a list of events for [date].
+  /// Tapping an event opens its detail sheet on top.
+  void _showDayEventsSheet(DateTime date, List<CalendarEvent> events) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (_) => _EventDetailSheet(event: event, onDelete: onDelete),
+      builder: (ctx) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: events.length == 1 ? 0.4 : 0.55,
+        minChildSize: 0.3,
+        maxChildSize: 0.9,
+        builder: (_, scrollCtrl) => ListView(
+          controller: scrollCtrl,
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          children: [
+            // Handle
+            Center(
+              child: Container(
+                margin: const EdgeInsets.symmetric(vertical: 12),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppTheme.onSurfaceVar.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            // Date label
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(
+                _formatDate(date),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                  color: AppTheme.onBgColor,
+                ),
+              ),
+            ),
+            // One tile per event/occasion — tap to open detail
+            ...events.map((e) => _OccasionListTile(
+                  event: e,
+                  onTap: () => _showEventDetail(ctx, e),
+                  onDelete: () {
+                    Navigator.of(context).pop();
+                    ref.read(calendarProvider.notifier).deleteEvent(e.id);
+                  },
+                )),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _showAddEventDialog(date);
+              },
+              icon: const Icon(Icons.add),
+              label: const Text('Add Event'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showEventDetail(BuildContext ctx, CalendarEvent event) {
+    showModalBottomSheet(
+      context: ctx,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _EventDetailSheet(
+        event: event,
+        onDelete: () {
+          Navigator.of(context).pop();
+          Navigator.of(context).pop();
+          ref.read(calendarProvider.notifier).deleteEvent(event.id);
+        },
+      ),
+    );
+  }
+
+  String _formatDate(DateTime d) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    return '${days[d.weekday % 7]}, ${d.day} ${months[d.month - 1]} ${d.year}';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Occasion list tile — shown in the day events list sheet
+// ---------------------------------------------------------------------------
+
+class _OccasionListTile extends StatelessWidget {
+  const _OccasionListTile({
+    required this.event,
+    required this.onTap,
+    required this.onDelete,
+  });
+
+  final CalendarEvent event;
+  final VoidCallback onTap;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        leading: const Icon(Icons.celebration_outlined, color: AppTheme.secondary),
+        title: Text(
+          event.title,
+          style: const TextStyle(fontWeight: FontWeight.w600, color: AppTheme.onBgColor),
+        ),
+        subtitle: event.occasion != null
+            ? Text(event.occasion!, style: const TextStyle(color: AppTheme.onSurfaceVar))
+            : null,
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.chevron_right, color: AppTheme.onSurfaceVar),
+            IconButton(
+              icon: const Icon(Icons.delete_outline, size: 18),
+              color: const Color(0xFFB00020),
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              onPressed: onDelete,
+            ),
+          ],
+        ),
+        onTap: onTap,
+      ),
     );
   }
 }
@@ -646,51 +744,112 @@ class _OutfitPickerTile extends ConsumerWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Outfit mini thumbnail — 32px circle shown on the event tile
+// Day outfit thumbnail — shown inside calendar date cells
 // ---------------------------------------------------------------------------
 
-class _OutfitMiniThumb extends ConsumerWidget {
-  const _OutfitMiniThumb({required this.profileId, required this.outfitId});
-
-  final String profileId;
-  final String outfitId;
+class _DayOutfitMarker extends ConsumerWidget {
+  const _DayOutfitMarker({required this.events});
+  final List<CalendarEvent> events;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final urlAsync = ref.watch(
-      outfitCoverUrlProvider((profileId: profileId, outfitId: outfitId)),
-    );
-    final colorScheme = Theme.of(context).colorScheme;
+    // Collect all assignments across all events for this day
+    final assignments = <({String profileId, String outfitId})>[];
+    for (final event in events) {
+      for (final entry in event.outfitAssignments.entries) {
+        assignments.add((profileId: entry.key, outfitId: entry.value));
+      }
+    }
+    if (assignments.isEmpty) {
+      // Event exists but no outfit assigned — show a soft indicator dot
+      return Container(
+        width: 6,
+        height: 6,
+        margin: const EdgeInsets.only(top: 3),
+        decoration: const BoxDecoration(
+          color: AppTheme.secondary,
+          shape: BoxShape.circle,
+        ),
+      );
+    }
 
-    Widget child = urlAsync.when(
-      data: (url) => url != null
-          ? CachedNetworkImage(
-              imageUrl: url,
-              fit: BoxFit.cover,
-              errorWidget: (ctx, url, err) =>
-                  Icon(Icons.checkroom, size: 16, color: colorScheme.primary),
-            )
-          : Icon(Icons.checkroom, size: 16, color: colorScheme.primary),
-      loading: () => const SizedBox.shrink(),
-      error: (err, st) =>
-          Icon(Icons.checkroom, size: 16, color: colorScheme.primary),
+    final first = assignments.first;
+    final coverAsync = ref.watch(
+      outfitCoverUrlProvider((profileId: first.profileId, outfitId: first.outfitId)),
     );
+    final extraCount = assignments.length - 1;
 
-    return Container(
-      width: 32,
-      height: 32,
-      margin: const EdgeInsets.only(right: 4),
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: colorScheme.primary, width: 1.5),
-        color: colorScheme.surfaceContainerHighest,
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: SizedBox(
+        width: 48,
+        height: 48,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            // Thumbnail
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                gradient: AppTheme.garmentBackground,
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: coverAsync.when(
+                data: (url) => url != null
+                    ? CachedNetworkImage(
+                        imageUrl: url,
+                        fit: BoxFit.contain,
+                        errorWidget: (_, _, _) => const Icon(
+                          Icons.checkroom_outlined,
+                          size: 18,
+                          color: AppTheme.onSurfaceVar,
+                        ),
+                      )
+                    : const Icon(
+                        Icons.checkroom_outlined,
+                        size: 18,
+                        color: AppTheme.onSurfaceVar,
+                      ),
+                loading: () => const SizedBox.shrink(),
+                error: (_, _) => const Icon(
+                  Icons.checkroom_outlined,
+                  size: 18,
+                  color: AppTheme.onSurfaceVar,
+                ),
+              ),
+            ),
+            // +N badge
+            if (extraCount > 0)
+              Positioned(
+                right: -2,
+                bottom: -2,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.white, width: 1),
+                  ),
+                  child: Text(
+                    '+$extraCount',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 8,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
-      child: Center(child: child),
     );
   }
 }
 
+// ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
 // Add event dialog
 // ---------------------------------------------------------------------------

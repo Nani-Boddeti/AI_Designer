@@ -7,6 +7,7 @@ import '../presentation/providers/onboarding_provider.dart';
 import '../presentation/providers/version_check_provider.dart';
 import '../presentation/screens/auth/auth_screen.dart';
 import '../presentation/screens/force_update/force_update_screen.dart';
+import '../presentation/screens/auth/household_picker_screen.dart';
 import '../presentation/screens/auth/household_setup_screen.dart';
 import '../presentation/screens/calendar/style_calendar_screen.dart';
 import '../presentation/screens/home/home_screen.dart';
@@ -55,6 +56,7 @@ class AppRoutes {
   static const String savedOutfits = '/saved-outfits/:profileId';
   static const String manualItemSelection = '/manual-item-selection';
   static const String forceUpdate = '/force-update';
+  static const String householdPicker = '/household-picker';
 
   // Helper to build concrete paths.
   static String wardrobePath(String profileId) => '/wardrobe/$profileId';
@@ -102,17 +104,26 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // Never redirect while loading.
       if (isLoading) return null;
 
-      final isOnSplash = state.matchedLocation == AppRoutes.splash;
-      final isOnAuth = state.matchedLocation == AppRoutes.auth;
-      final isOnSetup = state.matchedLocation == AppRoutes.householdSetup;
+      final loc = state.matchedLocation;
+      final isOnSplash = loc == AppRoutes.splash;
+      final isOnAuth = loc == AppRoutes.auth;
+      final isOnSetup = loc == AppRoutes.householdSetup;
+      final isOnPicker = loc == AppRoutes.householdPicker;
 
       if (authValue == null || !authValue.isAuthenticated) {
         if (isOnAuth) return null;
         return AppRoutes.auth;
       }
 
-      // Authenticated but no household yet.
-      if (!authValue.hasHousehold) {
+      // ── Multiple households, none selected yet → mandatory picker ─────────
+      if (authValue.needsHouseholdSelection) {
+        // Allow picker AND setup (user might want to create a new household).
+        if (isOnPicker || isOnSetup) return null;
+        return AppRoutes.householdPicker;
+      }
+
+      // ── Authenticated but no households at all → create/join one ─────────
+      if (authValue.needsHouseholdSetup) {
         if (isOnSetup) return null;
         return AppRoutes.householdSetup;
       }
@@ -120,13 +131,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // Show onboarding once after first household setup.
       final hasSeenOnboarding = ref.read(onboardingProvider);
       if (!hasSeenOnboarding) {
-        if (state.matchedLocation == AppRoutes.onboarding) return null;
+        if (loc == AppRoutes.onboarding) return null;
         return AppRoutes.onboarding;
       }
 
-      // Authenticated and has household — push off splash/auth/setup/onboarding.
-      if (isOnSplash || isOnAuth || isOnSetup ||
-          state.matchedLocation == AppRoutes.onboarding) {
+      // Authenticated with a selected household — push off transient screens.
+      // Note: isOnPicker and isOnSetup are intentionally excluded — users can
+      // voluntarily navigate to these screens (e.g. More > Households > Create)
+      // while already belonging to a household. Those screens navigate to home
+      // explicitly after completing their action.
+      if (isOnSplash || isOnAuth || loc == AppRoutes.onboarding) {
         return AppRoutes.home;
       }
 
@@ -233,6 +247,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.forceUpdate,
         builder: (_, _) => const ForceUpdateScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.householdPicker,
+        builder: (_, _) => const HouseholdPickerScreen(),
       ),
     ],
   );

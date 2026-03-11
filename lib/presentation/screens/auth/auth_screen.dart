@@ -159,7 +159,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
                     const Text(
                       'VibeVault',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: AppTheme.onBgColor,
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
                       ),
@@ -169,7 +169,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
                       'Your Closet. AI Magic. Perfect for Any Vibe.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.85),
+                        color: AppTheme.onSurfaceVar.withValues(alpha: 0.85),
                         fontSize: 11,
                       ),
                     ),

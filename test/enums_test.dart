@@ -45,6 +45,32 @@ void main() {
     test('"accessory" → accessory', () {
       expect(WardrobeCategory.fromString('accessory'), WardrobeCategory.accessory);
     });
+
+    // fullSet has a camelCase name — legacy DB rows and Gemini may output
+    // snake_case ('full_set') or lowercase ('fullset'). All must resolve correctly.
+    test('"fullSet" (camelCase) → fullSet', () {
+      expect(WardrobeCategory.fromString('fullSet'), WardrobeCategory.fullSet);
+    });
+
+    test('"full_set" (snake_case legacy) → fullSet', () {
+      expect(WardrobeCategory.fromString('full_set'), WardrobeCategory.fullSet);
+    });
+
+    test('"fullset" (lowercase) → fullSet', () {
+      expect(WardrobeCategory.fromString('fullset'), WardrobeCategory.fullSet);
+    });
+
+    test('"FULLSET" (uppercase) → fullSet', () {
+      expect(WardrobeCategory.fromString('FULLSET'), WardrobeCategory.fullSet);
+    });
+
+    test('"FullSet" (mixed case) → fullSet', () {
+      expect(WardrobeCategory.fromString('FullSet'), WardrobeCategory.fullSet);
+    });
+
+    test('"FULL_SET" (uppercase snake_case) → fullSet', () {
+      expect(WardrobeCategory.fromString('FULL_SET'), WardrobeCategory.fullSet);
+    });
   });
 
   // -------------------------------------------------------------------------

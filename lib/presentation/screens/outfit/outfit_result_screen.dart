@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/services/review_service.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../data/models/wardrobe_item.dart';
 import '../../../router/app_router.dart';
 import '../../providers/outfit_provider.dart';
@@ -19,6 +20,7 @@ class OutfitResultScreen extends ConsumerStatefulWidget {
 
 class _OutfitResultScreenState extends ConsumerState<OutfitResultScreen> {
   bool _savingAll = false;
+  final Set<String> _savedIds = {};
 
   @override
   Widget build(BuildContext context) {
@@ -34,8 +36,10 @@ class _OutfitResultScreenState extends ConsumerState<OutfitResultScreen> {
     }
 
     return Scaffold(
+      backgroundColor: AppTheme.scaffoldBg,
       appBar: AppBar(
         title: const Text('Outfit Results'),
+        backgroundColor: AppTheme.scaffoldBg,
         actions: [
           IconButton(
             icon: const Icon(Icons.tune),
@@ -56,7 +60,9 @@ class _OutfitResultScreenState extends ConsumerState<OutfitResultScreen> {
         children: [
           FloatingActionButton.extended(
             heroTag: 'save_all',
-            onPressed: _savingAll ? null : () => _saveAll(generated),
+            onPressed: (_savingAll || _savedIds.length == generated.length)
+                ? null
+                : () => _saveAll(generated),
             icon: _savingAll
                 ? const SizedBox(
                     width: 18,
@@ -65,7 +71,11 @@ class _OutfitResultScreenState extends ConsumerState<OutfitResultScreen> {
                         strokeWidth: 2, color: Colors.white),
                   )
                 : const Icon(Icons.bookmark_add_outlined),
-            label: Text(_savingAll ? 'Saving…' : 'Save All'),
+            label: Text(_savingAll
+                ? 'Saving…'
+                : _savedIds.length == generated.length
+                    ? 'All Saved'
+                    : 'Save All'),
           ),
           const SizedBox(height: 8),
           FloatingActionButton.extended(
@@ -84,18 +94,28 @@ class _OutfitResultScreenState extends ConsumerState<OutfitResultScreen> {
 
   Future<void> _saveAll(List<GeneratedOutfit> generated) async {
     setState(() => _savingAll = true);
+    int newlySaved = 0;
     try {
       for (final g in generated) {
+        // Skip outfits already saved individually.
+        if (_savedIds.contains(g.outfit.id)) continue;
+        final outfitWithScore =
+            g.outfit.copyWith(harmonyScore: g.harmonyScore);
         await ref
             .read(outfitProvider(g.outfit.profileId).notifier)
-            .saveOutfit(g.outfit);
+            .saveOutfit(outfitWithScore);
+        _savedIds.add(g.outfit.id);
+        newlySaved++;
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('All outfits saved!')),
+          SnackBar(
+            content: Text(newlySaved == 0
+                ? 'All outfits already saved!'
+                : 'All outfits saved!'),
+          ),
         );
-        // Trigger in-app review after the user's first successful outfit save.
-        ReviewService.requestIfEligible();
+        if (newlySaved > 0) ReviewService.requestIfEligible();
       }
     } catch (_) {
       if (mounted) {
@@ -146,6 +166,8 @@ class _OutfitResultScreenState extends ConsumerState<OutfitResultScreen> {
             profileName: entry.value.first.profileName,
             variants: entry.value
               ..sort((a, b) => a.variantNumber.compareTo(b.variantNumber)),
+            savedIds: _savedIds,
+            onSaved: (id) => setState(() => _savedIds.add(id)),
           ),
       ],
     );
@@ -161,10 +183,14 @@ class _ProfileSection extends StatelessWidget {
   const _ProfileSection({
     required this.profileName,
     required this.variants,
+    required this.savedIds,
+    required this.onSaved,
   });
 
   final String profileName;
   final List<GeneratedOutfit> variants;
+  final Set<String> savedIds;
+  final void Function(String id) onSaved;
 
   @override
   Widget build(BuildContext context) {
@@ -173,18 +199,26 @@ class _ProfileSection extends StatelessWidget {
       children: [
         // Profile header
         Padding(
-          padding: const EdgeInsets.only(bottom: 8, top: 4),
+          padding: const EdgeInsets.only(bottom: 10, top: 8),
           child: Row(
             children: [
               CircleAvatar(
-                child: Text(profileName.isNotEmpty
-                    ? profileName[0].toUpperCase()
-                    : '?'),
+                backgroundColor: AppTheme.primaryContainer,
+                child: Text(
+                  profileName.isNotEmpty ? profileName[0].toUpperCase() : '?',
+                  style: const TextStyle(
+                    color: AppTheme.primary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
               const SizedBox(width: 10),
               Text(profileName,
                   style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 16)),
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                    color: AppTheme.onBgColor,
+                  )),
             ],
           ),
         ),
@@ -193,6 +227,8 @@ class _ProfileSection extends StatelessWidget {
           _OutfitCard(
             generated: g,
             variantLabel: g.variantNumber == 1 ? 'Option A' : 'Option B',
+            initialSaved: savedIds.contains(g.outfit.id),
+            onSaved: () => onSaved(g.outfit.id),
           ),
         const SizedBox(height: 8),
       ],
@@ -208,27 +244,49 @@ class _OutfitCard extends ConsumerStatefulWidget {
   const _OutfitCard({
     required this.generated,
     required this.variantLabel,
+    required this.initialSaved,
+    required this.onSaved,
   });
 
   final GeneratedOutfit generated;
   final String variantLabel;
+  final bool initialSaved;
+  final VoidCallback onSaved;
 
   @override
   ConsumerState<_OutfitCard> createState() => _OutfitCardState();
 }
 
 class _OutfitCardState extends ConsumerState<_OutfitCard> {
-  bool _saved = false;
+  late bool _saved;
   bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _saved = widget.initialSaved;
+  }
+
+  @override
+  void didUpdateWidget(_OutfitCard old) {
+    super.didUpdateWidget(old);
+    if (widget.initialSaved && !_saved) {
+      _saved = true;
+    }
+  }
 
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
-      final outfit = widget.generated.outfit;
+      final outfit = widget.generated.outfit
+          .copyWith(harmonyScore: widget.generated.harmonyScore);
       await ref
           .read(outfitProvider(outfit.profileId).notifier)
           .saveOutfit(outfit);
-      if (mounted) setState(() { _saving = false; _saved = true; });
+      if (mounted) {
+        setState(() { _saving = false; _saved = true; });
+        widget.onSaved();
+      }
     } catch (_) {
       if (mounted) setState(() => _saving = false);
     }
@@ -239,37 +297,59 @@ class _OutfitCardState extends ConsumerState<_OutfitCard> {
     final outfit = widget.generated.outfit;
     final profileId = outfit.profileId;
     final wardrobeAsync = ref.watch(wardrobeProvider(profileId));
-    final colorScheme = Theme.of(context).colorScheme;
 
     final wardrobeItems = wardrobeAsync.value ?? [];
     final outfitItems = wardrobeItems
         .where((item) => outfit.itemIds.contains(item.id))
         .toList();
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Header — variant label + match score
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-            child: Row(
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0CB07050),
+            blurRadius: 12,
+            offset: Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Header — variant label + match score
+            Row(
               children: [
-                Text(widget.variantLabel,
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    widget.variantLabel,
+                    style: const TextStyle(
+                      color: AppTheme.primary,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
                 const Spacer(),
                 _MatchScorePill(score: widget.generated.harmonyScore),
               ],
             ),
-          ),
 
-          // Item images
-          if (outfitItems.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: SizedBox(
-                height: 120,
+            // Item images
+            if (outfitItems.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 110,
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
                   itemCount: outfitItems.length,
@@ -278,38 +358,46 @@ class _OutfitCardState extends ConsumerState<_OutfitCard> {
                       _ItemThumbnail(item: outfitItems[i]),
                 ),
               ),
-            )
-          else
-            const Padding(
-              padding: EdgeInsets.all(12),
-              child: Text('Wardrobe items not loaded yet.',
-                  style: TextStyle(color: Colors.grey)),
-            ),
-
-          // Styling note
-          if (widget.generated.stylingNote.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.auto_awesome,
-                      size: 16, color: colorScheme.primary),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      widget.generated.stylingNote,
-                      style: const TextStyle(height: 1.5),
-                    ),
-                  ),
-                ],
+            ] else
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Text('Wardrobe items not loaded yet.',
+                    style: TextStyle(color: AppTheme.onSurfaceVar)),
               ),
-            ),
 
-          // Save button — 3 states: default / saving / saved
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-            child: _saved
+            // Styling note
+            if (widget.generated.stylingNote.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.inputFill,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.auto_awesome,
+                        size: 15, color: AppTheme.secondary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        widget.generated.stylingNote,
+                        style: const TextStyle(
+                          height: 1.5,
+                          fontSize: 13,
+                          color: AppTheme.onBgColor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
+            // Save button — 3 states: default / saving / saved
+            const SizedBox(height: 12),
+            _saved
                 ? OutlinedButton.icon(
                     onPressed: null,
                     icon: const Icon(Icons.bookmark_added),
@@ -329,8 +417,8 @@ class _OutfitCardState extends ConsumerState<_OutfitCard> {
                         icon: const Icon(Icons.bookmark_add_outlined),
                         label: const Text('Save Outfit'),
                       ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -345,20 +433,35 @@ class _ItemThumbnail extends StatelessWidget {
   Widget build(BuildContext context) {
     final url = item.displayImageUrl;
     return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(12),
       child: Container(
-        width: 100,
-        color: Colors.grey[200],
+        width: 96,
+        decoration: const BoxDecoration(
+          gradient: AppTheme.garmentBackground,
+        ),
         child: url != null
             ? CachedNetworkImage(
                 imageUrl: url,
-                fit: BoxFit.cover,
-                placeholder: (_, _) =>
-                    const Center(child: CircularProgressIndicator()),
-                errorWidget: (_, _, e) =>
-                    const Icon(Icons.broken_image),
+                fit: BoxFit.contain,
+                placeholder: (_, _) => const Center(
+                  child: CircularProgressIndicator(
+                    color: AppTheme.primary,
+                    strokeWidth: 2,
+                  ),
+                ),
+                errorWidget: (_, _, _) => const Center(
+                  child: Icon(
+                    Icons.checkroom_outlined,
+                    color: AppTheme.onSurfaceVar,
+                  ),
+                ),
               )
-            : const Icon(Icons.image_outlined),
+            : const Center(
+                child: Icon(
+                  Icons.checkroom_outlined,
+                  color: AppTheme.onSurfaceVar,
+                ),
+              ),
       ),
     );
   }
@@ -373,22 +476,25 @@ class _MatchScorePill extends StatelessWidget {
   Widget build(BuildContext context) {
     final pct = (score * 100).round();
     final color = score >= 0.7
-        ? Colors.green
+        ? AppTheme.tertiary
         : score >= 0.5
-            ? Colors.amber
-            : Colors.red;
+            ? AppTheme.secondary
+            : const Color(0xFFB00020);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
-        border: Border.all(color: color.withValues(alpha: 0.5)),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
-        '$pct% Match',
+        '$pct% match',
         style: TextStyle(
-            color: color, fontSize: 12, fontWeight: FontWeight.bold),
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }

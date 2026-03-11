@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../router/app_router.dart';
 import '../../providers/auth_provider.dart';
 
 class HouseholdSetupScreen extends ConsumerStatefulWidget {
@@ -59,7 +61,8 @@ class _HouseholdSetupScreenState extends ConsumerState<HouseholdSetupScreen>
           skinTone: _createSkinTone,
           dynamicPricing: _dynamicPricing,
         );
-    _showErrorIfNeeded();
+    if (!mounted) return;
+    _navigateAfterSuccess();
   }
 
   Future<void> _joinHousehold() async {
@@ -70,7 +73,23 @@ class _HouseholdSetupScreenState extends ConsumerState<HouseholdSetupScreen>
           gender: _joinGender.value,
           skinTone: _joinSkinTone,
         );
-    _showErrorIfNeeded();
+    if (!mounted) return;
+    _navigateAfterSuccess();
+  }
+
+  void _navigateAfterSuccess() {
+    final err = ref.read(authProvider).value?.error;
+    if (err != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(err),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    } else {
+      // Always go to home — router redirect will handle onboarding if needed.
+      context.go(AppRoutes.home);
+    }
   }
 
   Widget _buildSkinToneRow(SkinTone? current, ValueChanged<SkinTone?> onChanged) {
@@ -149,22 +168,6 @@ class _HouseholdSetupScreenState extends ConsumerState<HouseholdSetupScreen>
     );
   }
 
-  void _showErrorIfNeeded() {
-    if (!mounted) return;
-    // Read the inner AuthState.error — createHousehold/joinHousehold never
-    // set AsyncError (that would redirect to /auth), so AsyncValue.error
-    // is always null here. The error lives inside the AuthState data class.
-    final err = ref.read(authProvider).value?.error;
-    if (err != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(err),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final authAsync = ref.watch(authProvider);
@@ -173,8 +176,17 @@ class _HouseholdSetupScreenState extends ConsumerState<HouseholdSetupScreen>
     // (which deliberately stay as AsyncData to avoid router redirect bugs).
     final isLoading =
         authAsync.isLoading || (authAsync.value?.isLoading ?? false);
+    // Optional mode = user already belongs to a household and navigated here
+    // voluntarily (e.g. More > Households > Create or Join).
+    final isOptional = authAsync.value?.hasHousehold ?? false;
 
     return Scaffold(
+      appBar: isOptional
+          ? AppBar(
+              title: const Text('Add Household'),
+              backgroundColor: AppTheme.scaffoldBg,
+            )
+          : null,
       body: Column(
         children: [
           // Header
@@ -186,13 +198,13 @@ class _HouseholdSetupScreenState extends ConsumerState<HouseholdSetupScreen>
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.home_rounded,
-                        size: 44, color: Colors.white),
+                    Icon(Icons.home_rounded,
+                        size: 44, color: AppTheme.primary),
                     const SizedBox(height: 10),
                     const Text(
                       'Set Up Your Household',
                       style: TextStyle(
-                          color: Colors.white,
+                          color: AppTheme.onBgColor,
                           fontSize: 20,
                           fontWeight: FontWeight.bold),
                     ),
@@ -200,7 +212,7 @@ class _HouseholdSetupScreenState extends ConsumerState<HouseholdSetupScreen>
                     Text(
                       'Create or join a family group',
                       style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.85),
+                          color: AppTheme.onSurfaceVar.withValues(alpha: 0.85),
                           fontSize: 13),
                     ),
                   ],

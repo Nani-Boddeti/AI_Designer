@@ -35,6 +35,10 @@ String userFriendlyError(dynamic error) {
       (msg.contains('invite') && msg.contains('not found'))) {
     return 'Invalid invite code.';
   }
+  if (msg.contains('duplicate') || msg.contains('unique') ||
+      msg.contains('already exists') || msg.contains('23505')) {
+    return 'You already have an account set up. Please sign in instead.';
+  }
 
   // Generic fallback — never expose raw error
   return 'Something went wrong. Please try again.';

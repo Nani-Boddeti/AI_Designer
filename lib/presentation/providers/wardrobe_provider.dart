@@ -81,7 +81,11 @@ class WardrobeNotifier extends AsyncNotifier<List<WardrobeItem>> {
   String _currentStep = '';
   String get currentStep => _currentStep;
 
-  Future<WardrobeItem> addItem(Uint8List imageBytes, {bool isPrivate = false}) async {
+  Future<WardrobeItem> addItem(
+    Uint8List imageBytes, {
+    bool isPrivate = false,
+    bool removeBackground = true,
+  }) async {
     final previous = state;
     final repo = ref.read(wardrobeRepositoryProvider);
 
@@ -92,6 +96,7 @@ class WardrobeNotifier extends AsyncNotifier<List<WardrobeItem>> {
         profileId: _profileId,
         imageBytes: imageBytes,
         isPrivate: isPrivate,
+        removeBackground: removeBackground,
         onStep: (step) => _currentStep = step,
       );
       state = AsyncData<List<WardrobeItem>>([item, ...(state.value ?? <WardrobeItem>[])]);
@@ -150,11 +155,37 @@ final wardrobeProvider = AsyncNotifierProvider.autoDispose
   (arg) => WardrobeNotifier(arg),
 );
 
-/// Filtered view of wardrobe items by category.
+// ---------------------------------------------------------------------------
+// Active subcategory filter (per profile)
+// ---------------------------------------------------------------------------
+
+final wardrobeSubcategoryFilterProvider =
+    NotifierProvider.family<_WardrobeSubcategoryFilter, String?, String>(
+  (arg) => _WardrobeSubcategoryFilter(arg),
+);
+
+class _WardrobeSubcategoryFilter extends Notifier<String?> {
+  _WardrobeSubcategoryFilter(this._profileId);
+  final String _profileId; // ignore: unused_field
+
+  @override
+  String? build() => null; // null = All subcategories
+  void set(String? value) => state = value;
+}
+
+/// Filtered view of wardrobe items by category + optional subcategory.
 final filteredWardrobeProvider =
     Provider.autoDispose.family<List<WardrobeItem>, String>((ref, profileId) {
   final items = ref.watch(wardrobeProvider(profileId)).value ?? [];
-  final filter = ref.watch(wardrobeCategoryFilterProvider(profileId));
-  if (filter == null) return items;
-  return items.where((i) => i.category == filter).toList();
+  final catFilter = ref.watch(wardrobeCategoryFilterProvider(profileId));
+  final subFilter = ref.watch(wardrobeSubcategoryFilterProvider(profileId));
+
+  var result = items;
+  if (catFilter != null) {
+    result = result.where((i) => i.category == catFilter).toList();
+  }
+  if (subFilter != null) {
+    result = result.where((i) => i.subcategory == subFilter).toList();
+  }
+  return result;
 });

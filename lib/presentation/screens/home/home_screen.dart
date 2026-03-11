@@ -225,6 +225,12 @@ class _MoreTab extends ConsumerWidget {
             onTap: () => context.push(AppRoutes.profiles),
           ),
           _MoreTile(
+            icon: Icons.home_outlined,
+            title: 'Households',
+            subtitle: authState?.household?.name ?? 'Switch household',
+            onTap: () => context.push(AppRoutes.householdPicker),
+          ),
+          _MoreTile(
             icon: Icons.view_column_outlined,
             title: 'Virtual Lineup',
             subtitle: 'See everyone side by side',

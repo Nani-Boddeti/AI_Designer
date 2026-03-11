@@ -11,6 +11,7 @@ class Outfit {
     this.itemIds = const [],
     this.notes,
     this.isAiGenerated = false,
+    this.harmonyScore,
     required this.createdAt,
   });
 
@@ -24,6 +25,10 @@ class Outfit {
 
   final String? notes;
   final bool isAiGenerated;
+
+  /// AI colour-harmony score (0.0–1.0). Null for manually created outfits.
+  final double? harmonyScore;
+
   final DateTime createdAt;
 
   factory Outfit.fromJson(Map<String, dynamic> json) {
@@ -38,6 +43,7 @@ class Outfit {
           [],
       notes: json['notes'] as String?,
       isAiGenerated: json['is_ai_generated'] as bool? ?? false,
+      harmonyScore: (json['harmony_score'] as num?)?.toDouble(),
       createdAt: DateTime.parse(json['created_at'] as String),
     );
   }
@@ -51,6 +57,7 @@ class Outfit {
       'item_ids': itemIds,
       if (notes != null) 'notes': notes,
       'is_ai_generated': isAiGenerated,
+      if (harmonyScore != null) 'harmony_score': harmonyScore,
       'created_at': createdAt.toIso8601String(),
     };
   }
@@ -64,6 +71,7 @@ class Outfit {
     List<String>? itemIds,
     Object? notes = _kSentinel,
     bool? isAiGenerated,
+    double? harmonyScore,
     DateTime? createdAt,
   }) {
     return Outfit(
@@ -74,6 +82,7 @@ class Outfit {
       itemIds: itemIds ?? this.itemIds,
       notes: identical(notes, _kSentinel) ? this.notes : notes as String?,
       isAiGenerated: isAiGenerated ?? this.isAiGenerated,
+      harmonyScore: harmonyScore ?? this.harmonyScore,
       createdAt: createdAt ?? this.createdAt,
     );
   }

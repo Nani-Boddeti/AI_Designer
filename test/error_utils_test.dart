@@ -166,7 +166,8 @@ void main() {
       final friendly = userFriendlyError(rawError);
       expect(friendly, isNot(contains('PostgrestException')));
       expect(friendly, isNot(contains('profiles_auth_user_id')));
-      expect(friendly, 'Something went wrong. Please try again.');
+      // Duplicate-key errors now get a specific friendly message.
+      expect(friendly, 'You already have an account set up. Please sign in instead.');
     });
 
     test('supabase URL not exposed', () {

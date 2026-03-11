@@ -11,6 +11,8 @@ import '../../data/repositories/auth_repository.dart';
 import '../../data/services/supabase_service.dart';
 import '../../data/models/household.dart';
 import '../../data/models/profile.dart';
+import 'calendar_provider.dart';
+import 'outfit_provider.dart';
 
 // ---------------------------------------------------------------------------
 // Auth state data class
@@ -24,6 +26,8 @@ class AuthState {
     this.user,
     this.profile,
     this.household,
+    this.allHouseholds = const [],
+    this.adminHouseholdIds = const {},
     this.isLoading = false,
     this.error,
   });
@@ -31,6 +35,11 @@ class AuthState {
   final User? user;
   final Profile? profile;
   final Household? household;
+  final List<Household> allHouseholds;
+
+  /// IDs of households where the current user has admin role.
+  final Set<String> adminHouseholdIds;
+
   final bool isLoading;
   final String? error;
 
@@ -38,10 +47,24 @@ class AuthState {
   bool get hasProfile => profile != null;
   bool get hasHousehold => household != null;
 
+  /// Authenticated but has no households at all → needs to create/join one.
+  bool get needsHouseholdSetup =>
+      isAuthenticated && allHouseholds.isEmpty && !hasHousehold;
+
+  /// Authenticated with multiple households but none selected yet → show picker.
+  bool get needsHouseholdSelection =>
+      isAuthenticated && allHouseholds.isNotEmpty && !hasHousehold;
+
+  /// Whether the user is admin in a specific household.
+  bool isAdminInHousehold(String householdId) =>
+      adminHouseholdIds.contains(householdId);
+
   AuthState copyWith({
     User? user,
     Profile? profile,
     Household? household,
+    List<Household>? allHouseholds,
+    Set<String>? adminHouseholdIds,
     bool? isLoading,
     // Pass null to clear, omit entirely to keep the existing value.
     Object? error = _kKeepError,
@@ -50,6 +73,8 @@ class AuthState {
       user: user ?? this.user,
       profile: profile ?? this.profile,
       household: household ?? this.household,
+      allHouseholds: allHouseholds ?? this.allHouseholds,
+      adminHouseholdIds: adminHouseholdIds ?? this.adminHouseholdIds,
       isLoading: isLoading ?? this.isLoading,
       error: identical(error, _kKeepError) ? this.error : error as String?,
     );
@@ -89,31 +114,176 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     return _buildFromCurrentSession(svc);
   }
 
-  Future<AuthState> _buildFromCurrentSession(SupabaseService svc) async {
+  Future<AuthState> _buildFromCurrentSession(
+    SupabaseService svc, {
+    bool forcePickerForMultiple = false,
+  }) async {
     final user = svc.getCurrentUser();
     if (user == null) return const AuthState();
 
-    try {
-      final profile = await svc
-          .getCurrentProfile()
-          .timeout(const Duration(seconds: 10));
-      if (profile == null) return AuthState(user: user);
+    // ── Step 1: fetch membership-based households ──────────────────────────
+    final (:households, :adminIds) = await svc.fetchHouseholdMemberships();
 
-      final household = await svc
-          .getHousehold(profile.householdId)
-          .timeout(const Duration(seconds: 10));
+    // Sync FCM token — fire-and-forget.
+    unawaited(
+      NotificationService.syncToken(svc.client, user.id).catchError((_) {}),
+    );
 
-      // Sync FCM token in the background — non-blocking, non-fatal.
-      unawaited(
-        NotificationService.syncToken(svc.client, user.id).catchError((_) {}),
-      );
+    // ── Step 2: find and backfill any missing membership rows ──────────────
+    // This handles both fully-legacy accounts (no rows at all) AND the mixed
+    // case where some households have rows but others don't (e.g. a household
+    // created before the memberships table was added, alongside a newer one
+    // that was created via the app and has a proper row).
+    final knownIds = households.map((h) => h.id).toSet();
+    final missingHouseholds =
+        await _fetchAndBackfillMissingHouseholds(svc, user.id, excludeIds: knownIds);
 
-      return AuthState(user: user, profile: profile, household: household);
-    } catch (_) {
-      // Profile/household fetch failed (RLS, timeout, network) — user is still
-      // authenticated, router will redirect to household-setup.
+    final allHouseholds = [...households, ...missingHouseholds];
+
+    if (allHouseholds.isEmpty) {
+      // Genuinely no households → router will redirect to /household-setup.
       return AuthState(user: user);
     }
+
+    return _resolveHouseholds(
+      svc: svc,
+      user: user,
+      households: allHouseholds,
+      adminIds: adminIds,
+      forcePickerForMultiple: forcePickerForMultiple,
+    );
+  }
+
+  /// Selects or returns households for the final AuthState.
+  Future<AuthState> _resolveHouseholds({
+    required SupabaseService svc,
+    required User user,
+    required List<Household> households,
+    required Set<String> adminIds,
+    bool forcePickerForMultiple = false,
+  }) async {
+    // ── Single household: always auto-select (no choice to make) ──────────
+    if (households.length == 1) {
+      final household = households.first;
+
+      // Check if there's a previously persisted selection in user_preferences.
+      // If so (e.g. re-opening the app), honour it so the user stays in the
+      // household they chose last time.
+      final activeId = await svc.getActiveHouseholdId(user.id);
+      final effectiveHousehold = (activeId != null && activeId != household.id)
+          ? (await svc.getHousehold(activeId) ?? household)
+          : household;
+
+      unawaited(
+        svc.upsertActiveHousehold(user.id, effectiveHousehold.id).catchError((_) {}),
+      );
+
+      Profile? profile;
+      try {
+        profile = await svc
+            .getProfileForHousehold(effectiveHousehold.id)
+            .timeout(const Duration(seconds: 10));
+      } catch (_) {}
+
+      return AuthState(
+        user: user,
+        profile: profile,
+        household: effectiveHousehold,
+        allHouseholds: households,
+        adminHouseholdIds: adminIds,
+      );
+    }
+
+    // ── Multiple households ────────────────────────────────────────────────
+    // On explicit sign-in (forcePickerForMultiple=true) always show the picker
+    // so the user consciously chooses which household to enter.
+    // On app restart (forcePickerForMultiple=false) restore the last selection.
+    if (!forcePickerForMultiple) {
+      final activeId = await svc.getActiveHouseholdId(user.id);
+      if (activeId != null) {
+        final active = households.where((h) => h.id == activeId).firstOrNull;
+        if (active != null) {
+          Profile? profile;
+          try {
+            profile = await svc
+                .getProfileForHousehold(active.id)
+                .timeout(const Duration(seconds: 10));
+          } catch (_) {}
+          return AuthState(
+            user: user,
+            profile: profile,
+            household: active,
+            allHouseholds: households,
+            adminHouseholdIds: adminIds,
+          );
+        }
+      }
+    }
+
+    // No selection (or forced picker) — router redirects to /household-picker.
+    return AuthState(
+      user: user,
+      allHouseholds: households,
+      adminHouseholdIds: adminIds,
+    );
+  }
+
+  /// Finds all households where the user has a profile but no membership row
+  /// and returns them. Backfill is fire-and-forget so it never blocks login
+  /// or causes the user to see "create household" if the insert fails.
+  Future<List<Household>> _fetchAndBackfillMissingHouseholds(
+    SupabaseService svc,
+    String userId, {
+    required Set<String> excludeIds,
+  }) async {
+    // ── Fetch phase — isolated try/catch, always returns what it found ──────
+    final missing = <String, bool>{}; // householdId → isAdmin
+    List<Household> result = [];
+    try {
+      // profiles_select_own: auth_user_id = auth.uid() — no dependency on
+      // current_household_id(), safe to call regardless of active household.
+      final profileRows = await svc.client
+          .from('profiles')
+          .select('household_id, is_admin')
+          .eq('auth_user_id', userId);
+
+      for (final row in profileRows as List) {
+        final hId = row['household_id'] as String;
+        if (!excludeIds.contains(hId)) {
+          missing[hId] = (row['is_admin'] as bool?) ?? false;
+        }
+      }
+
+      if (missing.isNotEmpty) {
+        // household_select_for_join (USING true) allows reading any household.
+        final householdsData = await svc.client
+            .from('households')
+            .select()
+            .inFilter('id', missing.keys.toList());
+        result = (householdsData as List)
+            .map((h) => Household.fromJson(h as Map<String, dynamic>))
+            .toList();
+      }
+    } catch (_) {
+      // Fetch failed — return whatever we collected before the error.
+    }
+
+    // ── Backfill phase — fire-and-forget, never blocks or hides result ──────
+    if (result.isNotEmpty) {
+      unawaited(() async {
+        try {
+          for (final h in result) {
+            await svc.client.from('household_memberships').insert({
+              'user_id': userId,
+              'household_id': h.id,
+              'is_admin': missing[h.id] ?? false,
+            });
+          }
+        } catch (_) {}
+      }());
+    }
+
+    return result;
   }
 
   // ---------------------------------------------------------------------------
@@ -132,7 +302,12 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
           .timeout(const Duration(seconds: 15),
               onTimeout: () => throw Exception(
                   'Connection timed out. Check your internet and try again.'));
-      return _buildFromCurrentSession(ref.read(supabaseServiceProvider));
+      final svc = ref.read(supabaseServiceProvider);
+      // forcePickerForMultiple=true: on explicit sign-in, multi-household users
+      // always see the picker regardless of any previously persisted selection.
+      // App restarts go through build() → _buildFromCurrentSession without this
+      // flag, so the last-selected household is restored automatically.
+      return _buildFromCurrentSession(svc, forcePickerForMultiple: true);
     });
   }
 
@@ -202,9 +377,78 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         user: repo.currentUser,
         profile: result.profile,
         household: result.household,
+        // Preserve existing households — creating a new one adds to the list.
+        allHouseholds: [...prev.allHouseholds, result.household],
+        adminHouseholdIds: {...prev.adminHouseholdIds, result.household.id},
       ));
+      // Clear stale caches so the new household shows fresh data.
+      ref.invalidate(outfitProvider);
+      ref.invalidate(calendarProvider);
+      ref.read(generatedOutfitsProvider.notifier).clear();
     } catch (e, stack) {
       FirebaseCrashlytics.instance.recordError(e, stack, reason: 'createHousehold');
+      state = AsyncData(prev.copyWith(isLoading: false, error: userFriendlyError(e)));
+    }
+  }
+
+  Future<void> switchHousehold(String householdId) async {
+    final prev = state.value ?? const AuthState();
+    state = AsyncData(prev.copyWith(isLoading: true, error: null));
+    try {
+      final svc = ref.read(supabaseServiceProvider);
+
+      // Persist active-household choice → drives current_household_id() RLS.
+      await svc.upsertActiveHousehold(prev.user!.id, householdId);
+
+      // Find household object from the already-loaded list (no extra DB call).
+      final household = prev.allHouseholds.where((h) => h.id == householdId).firstOrNull
+          ?? await svc.getHousehold(householdId);
+      if (household == null) throw Exception('Household not found');
+
+      // Fetch the user's profile for this specific household.
+      // Failure is non-fatal — home screen handles null profile gracefully.
+      Profile? profile;
+      try {
+        profile = await svc
+            .getProfileForHousehold(householdId)
+            .timeout(const Duration(seconds: 10));
+      } catch (_) {}
+
+      state = AsyncData(AuthState(
+        user: prev.user,
+        profile: profile,
+        household: household,
+        allHouseholds: prev.allHouseholds,
+        adminHouseholdIds: prev.adminHouseholdIds,
+      ));
+      // Invalidate caches so this household shows its own data.
+      ref.invalidate(outfitProvider);
+      ref.invalidate(calendarProvider);
+      ref.read(generatedOutfitsProvider.notifier).clear();
+    } catch (e, stack) {
+      FirebaseCrashlytics.instance.recordError(e, stack, reason: 'switchHousehold');
+      state = AsyncData(prev.copyWith(isLoading: false, error: userFriendlyError(e)));
+    }
+  }
+
+  Future<void> leaveHousehold(String householdId) async {
+    final prev = state.value ?? const AuthState();
+    state = AsyncData(prev.copyWith(isLoading: true, error: null));
+    try {
+      final svc = ref.read(supabaseServiceProvider);
+      await svc.client.functions.invoke(
+        'leave-household',
+        body: {'household_id': householdId},
+      );
+      // Clear the stale active-household preference so current_household_id()
+      // doesn't keep returning the just-left household during the re-fetch.
+      await svc.upsertActiveHousehold(prev.user!.id, null).catchError((_) {});
+      // _buildFromCurrentSession will auto-select the correct remaining household
+      // and sync user_preferences via upsertActiveHousehold.
+      final next = await _buildFromCurrentSession(svc);
+      state = AsyncData(next);
+    } catch (e, stack) {
+      FirebaseCrashlytics.instance.recordError(e, stack, reason: 'leaveHousehold');
       state = AsyncData(prev.copyWith(isLoading: false, error: userFriendlyError(e)));
     }
   }
@@ -248,6 +492,8 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         user: repo.currentUser,
         profile: result.profile,
         household: result.household,
+        allHouseholds: [...prev.allHouseholds, result.household],
+        adminHouseholdIds: prev.adminHouseholdIds, // not admin in joined household
       ));
 
       // Notify existing household members — fire-and-forget, non-fatal.

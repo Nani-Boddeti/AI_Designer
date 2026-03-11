@@ -59,24 +59,24 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                   const Text(
                     'VibeVault',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: AppTheme.onBgColor,
                       fontSize: 32,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 0.5,
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Text(
+                  const Text(
                     'Your Closet. AI Magic. Perfect for Any Vibe.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.8),
+                      color: AppTheme.onSurfaceVar,
                       fontSize: 13,
                     ),
                   ),
                   const SizedBox(height: 48),
                   const CircularProgressIndicator(
-                    color: Colors.white,
+                    color: AppTheme.primary,
                     strokeWidth: 2,
                   ),
                 ],
