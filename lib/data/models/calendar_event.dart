@@ -87,12 +87,18 @@ class CalendarEvent {
   /// Parses a DATE string (yyyy-MM-dd) as local midnight to avoid
   /// UTC-offset shifting event days for users west of UTC.
   static DateTime _parseLocalDate(String date) {
-    final parts = date.split('-');
-    return DateTime(
-      int.parse(parts[0]),
-      int.parse(parts[1]),
-      int.parse(parts[2]),
-    );
+    try {
+      final parts = date.split('-');
+      if (parts.length == 3) {
+        return DateTime(
+          int.parse(parts[0]),
+          int.parse(parts[1]),
+          int.parse(parts[2]),
+        );
+      }
+    } catch (_) {}
+    // Fallback: let Dart parse it (may shift to UTC but won't crash).
+    return DateTime.parse(date).toLocal();
   }
 
   @override

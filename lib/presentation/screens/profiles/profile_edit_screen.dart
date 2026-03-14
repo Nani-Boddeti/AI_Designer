@@ -13,6 +13,11 @@ import '../../providers/auth_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../../data/models/profile.dart';
 
+List<String> _toStringList(dynamic value) {
+  if (value is List) return value.map((e) => e.toString()).toList();
+  return [];
+}
+
 class ProfileEditScreen extends ConsumerStatefulWidget {
   const ProfileEditScreen({super.key, required this.profileId});
 
@@ -50,10 +55,8 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
         _gender = profile.gender;
         _skinTone = profile.skinTone;
         _stylePersona = List.from(profile.stylePersona);
-        _fitConstraints = List.from(
-          (profile.fitPreferences['constraints'] as List?)
-                  ?.cast<String>() ??
-              [],
+        _fitConstraints = _toStringList(
+          profile.fitPreferences['constraints'],
         );
       });
     }

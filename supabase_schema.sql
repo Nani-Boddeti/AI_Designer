@@ -134,12 +134,13 @@ CREATE TABLE IF NOT EXISTS device_tokens (
 -- Storage buckets
 -- ---------------------------------------------------------------------------
 
+-- Buckets are PRIVATE — images served via signed URLs only.
 INSERT INTO storage.buckets (id, name, public)
 VALUES
-  ('wardrobe-images',  'wardrobe-images',  true),
-  ('processed-images', 'processed-images', true),
-  ('avatars',          'avatars',          true)
-ON CONFLICT (id) DO NOTHING;
+  ('wardrobe-images',  'wardrobe-images',  false),
+  ('processed-images', 'processed-images', false),
+  ('avatars',          'avatars',          false)
+ON CONFLICT (id) DO UPDATE SET public = EXCLUDED.public;
 
 CREATE POLICY "wardrobe_images_select" ON storage.objects FOR SELECT USING (bucket_id = 'wardrobe-images');
 CREATE POLICY "wardrobe_images_insert" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'wardrobe-images' AND auth.role() = 'authenticated');
@@ -199,10 +200,13 @@ $$;
 CREATE POLICY "household_select" ON households
   FOR SELECT USING (id = current_household_id());
 
--- Open read needed so users can look up a household by invite code before a
--- profile exists (current_household_id() returns NULL at that point).
+-- All authenticated users can read any household row.
+-- Needed for: invite-code lookup before joining, PostgREST nested join in
+-- fetchHouseholdMemberships (.select('is_admin, households(*)')), and
+-- household-picker reads. RLS on memberships + current_household_id() gates
+-- write access; broad SELECT here does not expose sensitive data.
 CREATE POLICY "household_select_for_join" ON households
-  FOR SELECT USING (true);
+  FOR SELECT USING (auth.uid() IS NOT NULL);
 
 -- Any authenticated user can create a household.
 CREATE POLICY "household_insert" ON households
@@ -231,11 +235,42 @@ CREATE POLICY "profiles_insert" ON profiles
     OR (auth_user_id IS NULL AND household_id = current_household_id())
   );
 
+-- Users can edit their own profile; admins can edit any profile in the household.
+-- is_admin cannot be changed through this policy — only Edge Functions (service role) can.
 CREATE POLICY "profiles_update" ON profiles
-  FOR UPDATE USING (household_id = current_household_id());
+  FOR UPDATE USING (
+    household_id = current_household_id()
+    AND (
+      auth_user_id = auth.uid()
+      OR EXISTS (
+        SELECT 1 FROM household_memberships
+        WHERE user_id = auth.uid()
+          AND household_id = current_household_id()
+          AND is_admin = true
+      )
+    )
+  )
+  WITH CHECK (
+    is_admin = (SELECT is_admin FROM profiles p WHERE p.id = id)
+    OR EXISTS (
+      SELECT 1 FROM household_memberships
+      WHERE user_id = auth.uid()
+        AND household_id = current_household_id()
+        AND is_admin = true
+    )
+  );
 
+-- Only admins can delete profiles in the household.
 CREATE POLICY "profiles_delete" ON profiles
-  FOR DELETE USING (household_id = current_household_id());
+  FOR DELETE USING (
+    household_id = current_household_id()
+    AND EXISTS (
+      SELECT 1 FROM household_memberships
+      WHERE user_id = auth.uid()
+        AND household_id = current_household_id()
+        AND is_admin = true
+    )
+  );
 
 -- ── Household memberships ────────────────────────────────────────────────────
 
@@ -363,8 +398,38 @@ WHERE p.auth_user_id IS NOT NULL
 ON CONFLICT (user_id, household_id) DO NOTHING;
 
 -- ---------------------------------------------------------------------------
+-- Column migrations (safe to re-run on existing databases)
+-- ---------------------------------------------------------------------------
+
+ALTER TABLE wardrobe_items ADD COLUMN IF NOT EXISTS subcategory TEXT;
+ALTER TABLE outfits        ADD COLUMN IF NOT EXISTS harmony_score FLOAT;
+
+-- ---------------------------------------------------------------------------
 -- RPCs
 -- ---------------------------------------------------------------------------
+
+-- Atomically increments the monthly outfit-generation counter.
+-- Uses INSERT … ON CONFLICT DO UPDATE to avoid read-modify-write race conditions.
+-- Returns the new count so the caller can update local state accurately.
+CREATE OR REPLACE FUNCTION increment_household_usage(
+  p_household_id UUID,
+  p_year_month   TEXT
+)
+RETURNS INT
+LANGUAGE plpgsql SECURITY DEFINER
+AS $$
+DECLARE
+  new_count INT;
+BEGIN
+  INSERT INTO household_usage (household_id, year_month, outfit_count)
+  VALUES (p_household_id, p_year_month, 1)
+  ON CONFLICT (household_id, year_month)
+  DO UPDATE SET outfit_count = household_usage.outfit_count + 1
+  RETURNING outfit_count INTO new_count;
+
+  RETURN new_count;
+END;
+$$;
 
 -- Safely updates the household tier after Razorpay payment verification.
 -- SECURITY DEFINER: validates tier value before writing.
@@ -384,5 +449,76 @@ BEGIN
   SET tier            = p_tier,
       tier_expires_at = p_expires_at
   WHERE id = current_household_id();
+END;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- leave_household RPC
+-- Handles all leave-household edge cases atomically:
+--   sole member       → deletes the household (CASCADE removes memberships)
+--   last admin        → promotes longest-tenured other member first
+--   regular member    → removes own membership row
+-- Always clears user_preferences.active_household_id if it pointed here.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION leave_household(p_household_id UUID)
+RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER
+AS $$
+DECLARE
+  v_caller_id          UUID := auth.uid();
+  v_caller_is_admin    BOOLEAN;
+  v_other_count        INT;
+  v_other_admin_count  INT;
+  v_promote_id         UUID;
+  v_promote_user_id    UUID;
+BEGIN
+  -- Verify caller is a member and capture is_admin flag.
+  SELECT is_admin INTO v_caller_is_admin
+  FROM household_memberships
+  WHERE user_id = v_caller_id AND household_id = p_household_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Not a member of this household';
+  END IF;
+
+  -- Count other members.
+  SELECT COUNT(*) INTO v_other_count
+  FROM household_memberships
+  WHERE household_id = p_household_id AND user_id != v_caller_id;
+
+  IF v_other_count = 0 THEN
+    -- Sole member — delete household (CASCADE removes memberships).
+    DELETE FROM households WHERE id = p_household_id;
+  ELSE
+    IF v_caller_is_admin THEN
+      SELECT COUNT(*) INTO v_other_admin_count
+      FROM household_memberships
+      WHERE household_id = p_household_id
+        AND user_id != v_caller_id
+        AND is_admin = true;
+
+      IF v_other_admin_count = 0 THEN
+        -- Promote longest-tenured other member.
+        SELECT id, user_id INTO v_promote_id, v_promote_user_id
+        FROM household_memberships
+        WHERE household_id = p_household_id AND user_id != v_caller_id
+        ORDER BY joined_at ASC
+        LIMIT 1;
+
+        UPDATE household_memberships SET is_admin = true WHERE id = v_promote_id;
+        UPDATE profiles SET is_admin = true
+        WHERE auth_user_id = v_promote_user_id AND household_id = p_household_id;
+      END IF;
+    END IF;
+
+    -- Remove caller's membership.
+    DELETE FROM household_memberships
+    WHERE user_id = v_caller_id AND household_id = p_household_id;
+  END IF;
+
+  -- Clear active_household_id in user_preferences if it pointed here.
+  UPDATE user_preferences
+  SET active_household_id = NULL
+  WHERE user_id = v_caller_id AND active_household_id = p_household_id;
 END;
 $$;

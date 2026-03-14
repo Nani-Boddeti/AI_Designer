@@ -144,6 +144,11 @@ class _GapFillerScreenState extends ConsumerState<GapFillerScreen> {
   }
 }
 
+List<String> _toStringList(dynamic value) {
+  if (value is List) return value.map((e) => e.toString()).toList();
+  return [];
+}
+
 // ---------------------------------------------------------------------------
 // Individual gap recommendation card
 // ---------------------------------------------------------------------------
@@ -160,8 +165,8 @@ class _GapCard extends StatelessWidget {
     final category = gap['category'] as String? ?? '';
     final reason = gap['reason'] as String? ?? '';
     final searchQuery = gap['search_query'] as String? ?? itemName;
-    final colors = (gap['colors'] as List?)?.cast<String>() ?? [];
-    final colorNames = (gap['color_names'] as List?)?.cast<String>() ?? [];
+    final colors = _toStringList(gap['colors']);
+    final colorNames = _toStringList(gap['color_names']);
 
     final shopLinks = ShoppingLinks.allLinks(searchQuery).take(3).toList();
 

@@ -7,18 +7,45 @@ import '../../../data/models/household.dart';
 import '../../providers/auth_provider.dart';
 import '../../../router/app_router.dart';
 
-class HouseholdPickerScreen extends ConsumerWidget {
+class HouseholdPickerScreen extends ConsumerStatefulWidget {
   const HouseholdPickerScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HouseholdPickerScreen> createState() =>
+      _HouseholdPickerScreenState();
+}
+
+class _HouseholdPickerScreenState extends ConsumerState<HouseholdPickerScreen> {
+  /// ID of the household currently being switched to (null = not switching).
+  String? _switchingToId;
+
+  /// ID of the household currently being left (null = not leaving).
+  String? _leavingHouseholdId;
+
+  bool get _isBusy => _switchingToId != null || _leavingHouseholdId != null;
+
+  @override
+  Widget build(BuildContext context) {
     final authAsync = ref.watch(authProvider);
     final authState = authAsync.value;
     final allHouseholds = authState?.allHouseholds ?? [];
     final activeId = authState?.household?.id;
     final adminIds = authState?.adminHouseholdIds ?? {};
-    final isSwitching = authState?.isLoading ?? false;
     final switchError = authState?.error;
+
+    // Clear local loading flags if the provider finished (success or error).
+    // Use the same condition as the original: only clear once isLoading has
+    // gone true (operation started) and come back false (operation finished).
+    if (_switchingToId != null && authState?.isLoading == false) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _switchingToId = null);
+      });
+    }
+    if (_leavingHouseholdId != null && authState?.isLoading == false) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _leavingHouseholdId = null);
+      });
+    }
 
     // Mandatory = user has no household selected yet (post-login flow).
     // Optional = user navigated here from settings to switch.
@@ -107,14 +134,18 @@ class HouseholdPickerScreen extends ConsumerWidget {
                             household: h,
                             isActive: h.id == activeId,
                             isAdmin: adminIds.contains(h.id),
-                            isLoading: isSwitching,
-                            onTap: () => _switchTo(context, ref, h, isMandatory),
+                            isLoading: _switchingToId == h.id || _leavingHouseholdId == h.id,
+                            isDisabled: _isBusy,
+                            onTap: () => _switchTo(h),
+                            onLeave: _isBusy ? null : () => _leaveHousehold(h, adminIds.contains(h.id)),
                           ),
                         const SizedBox(height: 8),
                         const Divider(),
                         const SizedBox(height: 12),
                         OutlinedButton.icon(
-                          onPressed: () => context.push(AppRoutes.householdSetup),
+                          onPressed: _switchingToId != null
+                              ? null
+                              : () => context.push(AppRoutes.householdSetup),
                           icon: const Icon(Icons.add),
                           label: const Text('Create or Join a Household'),
                         ),
@@ -127,18 +158,106 @@ class HouseholdPickerScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _switchTo(
-    BuildContext context,
-    WidgetRef ref,
-    Household h,
-    bool isMandatory,
-  ) async {
+  Future<void> _switchTo(Household h) async {
+    setState(() => _switchingToId = h.id);
     await ref.read(authProvider.notifier).switchHousehold(h.id);
-    if (!context.mounted) return;
-    // Always go to home after switching — handles both mandatory (first-time
-    // picker) and optional (More > Households) flows. Router no longer
-    // auto-redirects away from /household-picker for optional navigation.
-    context.go(AppRoutes.home);
+    if (!mounted) return;
+
+    final error = ref.read(authProvider).value?.error;
+    if (error == null) {
+      // Switch succeeded — navigate home.
+      context.go(AppRoutes.home);
+    } else {
+      // Switch failed — stay on picker, error is shown in the UI.
+      setState(() => _switchingToId = null);
+    }
+  }
+
+  Future<void> _leaveHousehold(Household h, bool isAdmin) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => _LeaveConfirmDialog(household: h, isAdmin: isAdmin),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _leavingHouseholdId = h.id);
+    await ref.read(authProvider.notifier).leaveHousehold(h.id);
+    if (!mounted) return;
+    setState(() => _leavingHouseholdId = null);
+    // leaveHousehold() updates AuthState directly:
+    //   - No households left  → needsHouseholdSetup=true → router → /household-setup
+    //   - Households remain   → auto-selects first remaining, stays on picker
+  }
+}
+
+// ---------------------------------------------------------------------------
+
+class _LeaveConfirmDialog extends StatelessWidget {
+  const _LeaveConfirmDialog({
+    required this.household,
+    required this.isAdmin,
+  });
+
+  final Household household;
+  final bool isAdmin;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return AlertDialog(
+      title: const Text('Leave Household?'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('You are about to leave "${household.name}".'),
+          const SizedBox(height: 12),
+          if (isAdmin)
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: colorScheme.errorContainer.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.admin_panel_settings,
+                      color: colorScheme.error, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'You are the admin. The next longest-standing member will be promoted automatically.',
+                      style: TextStyle(
+                          fontSize: 13, color: colorScheme.onErrorContainer),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          if (!isAdmin) ...[
+            Text(
+              'You will lose access to this household and its wardrobe data.',
+              style: TextStyle(fontSize: 13, color: colorScheme.onSurfaceVariant),
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: colorScheme.error,
+            foregroundColor: colorScheme.onError,
+          ),
+          onPressed: () => Navigator.of(context).pop(true),
+          child: const Text('Leave'),
+        ),
+      ],
+    );
   }
 }
 
@@ -150,14 +269,18 @@ class _HouseholdCard extends StatelessWidget {
     required this.isActive,
     required this.isAdmin,
     required this.isLoading,
+    required this.isDisabled,
     required this.onTap,
+    required this.onLeave,
   });
 
   final Household household;
   final bool isActive;
   final bool isAdmin;
   final bool isLoading;
+  final bool isDisabled;
   final VoidCallback onTap;
+  final VoidCallback? onLeave;
 
   @override
   Widget build(BuildContext context) {
@@ -178,7 +301,7 @@ class _HouseholdCard extends StatelessWidget {
         ],
       ),
       child: ListTile(
-        onTap: (isActive || isLoading) ? null : onTap,
+        onTap: (isActive || isDisabled) ? null : onTap,
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         leading: CircleAvatar(
@@ -226,15 +349,38 @@ class _HouseholdCard extends StatelessWidget {
           household.tier == 'free' ? 'Free plan' : household.tier.toUpperCase(),
           style: const TextStyle(fontSize: 12, color: AppTheme.onSurfaceVar),
         ),
-        trailing: isActive
-            ? const Icon(Icons.check_circle, color: AppTheme.primary)
-            : isLoading
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.chevron_right, color: AppTheme.onSurfaceVar),
+        trailing: isLoading
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : PopupMenuButton<String>(
+                onSelected: (value) {
+                  if (value == 'leave') onLeave?.call();
+                },
+                enabled: onLeave != null,
+                itemBuilder: (ctx) => [
+                  PopupMenuItem<String>(
+                    value: 'leave',
+                    child: Row(
+                      children: [
+                        Icon(Icons.exit_to_app,
+                            color: Theme.of(ctx).colorScheme.error, size: 20),
+                        const SizedBox(width: 10),
+                        Text(
+                          'Leave Household',
+                          style: TextStyle(
+                              color: Theme.of(ctx).colorScheme.error),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                icon: isActive
+                    ? const Icon(Icons.check_circle, color: AppTheme.primary)
+                    : const Icon(Icons.more_vert, color: AppTheme.onSurfaceVar),
+              ),
       ),
     );
   }

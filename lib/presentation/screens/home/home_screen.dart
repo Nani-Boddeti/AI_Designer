@@ -328,6 +328,37 @@ class _MoreTab extends ConsumerWidget {
               await ref.read(authProvider.notifier).signOut();
             },
           ),
+          if (authState?.household != null)
+            _MoreTile(
+              icon: Icons.exit_to_app,
+              title: 'Leave Household',
+              subtitle: authState!.household!.name,
+              textColor: colorScheme.error,
+              onTap: () async {
+                final household = authState.household!;
+                final isAdmin = authState.adminHouseholdIds
+                    .contains(household.id);
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (_) => _LeaveHouseholdDialog(
+                    householdName: household.name,
+                    isAdmin: isAdmin,
+                  ),
+                );
+                if (confirmed == true) {
+                  await ref
+                      .read(authProvider.notifier)
+                      .leaveHousehold(household.id);
+                  if (!context.mounted) return;
+                  final err = ref.read(authProvider).value?.error;
+                  if (err != null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(err)),
+                    );
+                  }
+                }
+              },
+            ),
           _MoreTile(
             icon: Icons.delete_forever_outlined,
             title: 'Delete Account',
@@ -405,6 +436,73 @@ class _HomeFab extends ConsumerWidget {
     return const SizedBox.shrink();
   }
 }
+
+class _LeaveHouseholdDialog extends StatelessWidget {
+  const _LeaveHouseholdDialog({
+    required this.householdName,
+    required this.isAdmin,
+  });
+
+  final String householdName;
+  final bool isAdmin;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return AlertDialog(
+      title: const Text('Leave Household?'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('You are about to leave "$householdName".'),
+          if (isAdmin) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: colorScheme.errorContainer.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.admin_panel_settings,
+                      color: colorScheme.error, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'You are the admin. The next longest-standing member will be promoted automatically.',
+                      style: TextStyle(
+                          fontSize: 13,
+                          color: colorScheme.onErrorContainer),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: colorScheme.error,
+            foregroundColor: colorScheme.onError,
+          ),
+          onPressed: () => Navigator.of(context).pop(true),
+          child: const Text('Leave'),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 
 class _MoreTile extends StatelessWidget {
   const _MoreTile({

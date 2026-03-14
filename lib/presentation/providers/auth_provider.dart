@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/constants/app_constants.dart';
@@ -85,6 +86,12 @@ class AuthState {
 // Notifier
 // ---------------------------------------------------------------------------
 
+// SharedPreferences key for tracking intentionally-left household IDs.
+// Prevents _fetchAndBackfillMissingHouseholds from re-adding them on restart
+// (the RPC deletes the membership row but not the profile row, which the
+// backfill would otherwise treat as a "legacy missing membership").
+const _kLeftHouseholdsKey = 'left_household_ids';
+
 class AuthNotifier extends AsyncNotifier<AuthState> {
   @override
   Future<AuthState> build() async {
@@ -135,8 +142,19 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     // created before the memberships table was added, alongside a newer one
     // that was created via the app and has a proper row).
     final knownIds = households.map((h) => h.id).toSet();
-    final missingHouseholds =
-        await _fetchAndBackfillMissingHouseholds(svc, user.id, excludeIds: knownIds);
+
+    // Read intentionally-left household IDs from SharedPreferences and exclude
+    // them from the backfill. The RPC removes the membership row but not the
+    // profile, so without this exclusion the backfill treats every left
+    // household as a "legacy missing membership" and re-inserts it on restart.
+    final prefs = await SharedPreferences.getInstance();
+    final leftIds = (prefs.getStringList(_kLeftHouseholdsKey) ?? []).toSet();
+
+    final missingHouseholds = await _fetchAndBackfillMissingHouseholds(
+      svc,
+      user.id,
+      excludeIds: knownIds.union(leftIds),
+    );
 
     final allHouseholds = [...households, ...missingHouseholds];
 
@@ -421,14 +439,16 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         allHouseholds: prev.allHouseholds,
         adminHouseholdIds: prev.adminHouseholdIds,
       ));
-      // Invalidate caches so this household shows its own data.
-      ref.invalidate(outfitProvider);
-      ref.invalidate(calendarProvider);
-      ref.read(generatedOutfitsProvider.notifier).clear();
     } catch (e, stack) {
       FirebaseCrashlytics.instance.recordError(e, stack, reason: 'switchHousehold');
       state = AsyncData(prev.copyWith(isLoading: false, error: userFriendlyError(e)));
+      return;
     }
+    // Invalidate caches AFTER success state is set — kept outside try so a
+    // cache-clear failure can never roll back a successful household switch.
+    ref.invalidate(outfitProvider);
+    ref.invalidate(calendarProvider);
+    ref.read(generatedOutfitsProvider.notifier).clear();
   }
 
   Future<void> leaveHousehold(String householdId) async {
@@ -436,17 +456,68 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     state = AsyncData(prev.copyWith(isLoading: true, error: null));
     try {
       final svc = ref.read(supabaseServiceProvider);
-      await svc.client.functions.invoke(
-        'leave-household',
-        body: {'household_id': householdId},
+      // Use RPC instead of Edge Function — avoids JWT edge cases with
+      // the functions gateway; uses the same auth path as all other DB calls.
+      await svc.client.rpc(
+        'leave_household',
+        params: {'p_household_id': householdId},
       );
-      // Clear the stale active-household preference so current_household_id()
-      // doesn't keep returning the just-left household during the re-fetch.
-      await svc.upsertActiveHousehold(prev.user!.id, null).catchError((_) {});
-      // _buildFromCurrentSession will auto-select the correct remaining household
-      // and sync user_preferences via upsertActiveHousehold.
-      final next = await _buildFromCurrentSession(svc);
-      state = AsyncData(next);
+
+      // Persist the left household ID so _fetchAndBackfillMissingHouseholds
+      // never re-adds it on subsequent app starts (RPC removes the membership
+      // row but not the profile, which the backfill would otherwise treat as a
+      // "legacy missing membership" and re-insert on every restart).
+      final prefs = await SharedPreferences.getInstance();
+      final leftIds = <String>[...(prefs.getStringList(_kLeftHouseholdsKey) ?? []), householdId];
+      await prefs.setStringList(_kLeftHouseholdsKey, leftIds);
+
+      // Derive new state directly from prev rather than calling
+      // _buildFromCurrentSession. _buildFromCurrentSession runs
+      // _fetchAndBackfillMissingHouseholds, which finds the user's profile in
+      // the left household (the RPC only removes the membership row, not the
+      // profile) and re-inserts the membership — undoing the leave entirely.
+      final remaining = prev.allHouseholds
+          .where((h) => h.id != householdId)
+          .toList();
+      final remainingAdminIds = {...prev.adminHouseholdIds}..remove(householdId);
+
+      if (remaining.isEmpty) {
+        // No households left → clear active preference and go to setup.
+        await svc.upsertActiveHousehold(prev.user!.id, null).catchError((_) {});
+        state = AsyncData(AuthState(user: prev.user));
+        return;
+      }
+
+      // Auto-select the first remaining household so:
+      //  • needsHouseholdSelection stays false → no picker redirect (Bug 2)
+      //  • active_household_id is persisted → app restart restores it (Bug 3)
+      final next = remaining.first;
+      await svc.upsertActiveHousehold(prev.user!.id, next.id).catchError((_) {});
+
+      Profile? profile;
+      try {
+        profile = await svc
+            .getProfileForHousehold(next.id)
+            .timeout(const Duration(seconds: 10));
+      } catch (_) {}
+
+      state = AsyncData(AuthState(
+        user: prev.user,
+        profile: profile,
+        household: next,
+        allHouseholds: remaining,
+        adminHouseholdIds: remainingAdminIds,
+      ));
+
+      // Defer invalidations to after authProvider's state update propagates.
+      // Calling ref.invalidate(calendarProvider) synchronously here triggers a
+      // CircularDependencyError because calendarProvider watches authProvider —
+      // Riverpod detects the cycle when both are mid-update at the same time.
+      Future.microtask(() {
+        ref.invalidate(outfitProvider);
+        ref.invalidate(calendarProvider);
+        ref.read(generatedOutfitsProvider.notifier).clear();
+      });
     } catch (e, stack) {
       FirebaseCrashlytics.instance.recordError(e, stack, reason: 'leaveHousehold');
       state = AsyncData(prev.copyWith(isLoading: false, error: userFriendlyError(e)));
@@ -488,6 +559,17 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         gender: gender,
         skinTone: skinTone,
       );
+      // If the user previously left this household, remove it from the
+      // "left households" exclusion list so future backfills work correctly.
+      final prefs = await SharedPreferences.getInstance();
+      final leftIds = prefs.getStringList(_kLeftHouseholdsKey) ?? [];
+      if (leftIds.contains(result.household.id)) {
+        await prefs.setStringList(
+          _kLeftHouseholdsKey,
+          leftIds.where((id) => id != result.household.id).toList(),
+        );
+      }
+
       state = AsyncData(AuthState(
         user: repo.currentUser,
         profile: result.profile,

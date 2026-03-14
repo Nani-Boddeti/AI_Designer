@@ -77,13 +77,20 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
         );
       }
     } catch (e, stack) {
+      final paymentId = response.paymentId ?? 'unknown';
       FirebaseCrashlytics.instance.recordError(
-        e, stack, reason: 'payment-verification-failed', fatal: false,
+        e,
+        stack,
+        reason: 'payment-verification-failed',
+        fatal: false,
+        information: ['payment_id: $paymentId', 'tier: $_targetTier'],
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Payment received but activation failed. Contact support.'),
+          SnackBar(
+            content: Text(
+              'Activation failed. Contact support with ref: ${paymentId.length > 8 ? paymentId.substring(paymentId.length - 8) : paymentId}',
+            ),
           ),
         );
       }
@@ -119,8 +126,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
     );
   }
 
-  Future<void> _openCheckout(
-      String targetTier, String userEmail) async {
+  Future<void> _openCheckout(String targetTier) async {
     final householdId =
         ref.read(authProvider).value?.household?.id ?? '';
     if (householdId.isEmpty) return;
@@ -143,15 +149,28 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
         throw Exception(data?['error'] ?? 'Failed to create order');
       }
 
+      // Validate that the key_id from the server matches our configured key —
+      // prevents a compromised Edge Function from redirecting payments.
+      const expectedKeyId = String.fromEnvironment('RAZORPAY_KEY_ID');
+      if (expectedKeyId.isNotEmpty && data['key_id'] != expectedKeyId) {
+        throw Exception('Payment configuration error. Please contact support.');
+      }
+
+      // Sanity-check amount before opening Razorpay.
+      final amount = data['amount'];
+      if (amount is! int || amount <= 0) {
+        throw Exception('Invalid payment amount received from server.');
+      }
+
       final tierLabel = targetTier == 'prime' ? 'Prime' : 'Pro';
       final options = {
         'key': data['key_id'] as String,
-        'amount': data['amount'] as int,
+        'amount': amount,
         'order_id': data['order_id'] as String,
         'currency': data['currency'] as String? ?? 'INR',
         'name': 'VibeVault',
         'description': '$tierLabel Plan — monthly outfit suggestions',
-        'prefill': {'email': userEmail},
+        // No 'prefill' — avoids sending user email to Razorpay unnecessarily.
         'theme': {'color': '#6750A4'},
       };
       _razorpay.open(options);
@@ -185,7 +204,6 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
         usageLoading: usageAsync.isLoading,
         household: household,
         profiles: profiles,
-        userEmail: authState?.user?.email ?? '',
         colorScheme: colorScheme,
       ),
     );
@@ -197,7 +215,6 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
     required bool usageLoading,
     required Household? household,
     required List<Profile> profiles,
-    required String userEmail,
     required ColorScheme colorScheme,
   }) {
     final isProActive = household?.isProActive ?? false;
@@ -330,7 +347,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
             colorScheme: colorScheme,
             dynamicPricing: dynamicPricing,
             profileCount: profiles.length,
-            onSubscribe: () => _openCheckout('pro', userEmail),
+            onSubscribe: () => _openCheckout('pro'),
           ),
 
           const SizedBox(height: AppSizes.paddingMd),
@@ -356,7 +373,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
             colorScheme: colorScheme,
             dynamicPricing: dynamicPricing,
             profileCount: profiles.length,
-            onSubscribe: () => _openCheckout('prime', userEmail),
+            onSubscribe: () => _openCheckout('prime'),
             highlight: true,
           ),
 

@@ -8,6 +8,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/error_utils.dart';
 import '../../../data/models/calendar_event.dart';
 import '../../../data/models/outfit.dart';
+import '../../../data/models/profile.dart';
 import '../../../data/repositories/calendar_repository.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/calendar_provider.dart';
@@ -56,11 +57,6 @@ class _StyleCalendarScreenState
               _selectedDay = selected;
               _focusedDay = focused;
             });
-            // Only open detail sheet when the tapped day has actual events.
-            final dayEvents = _getEventsForDay(selected);
-            if (dayEvents.isNotEmpty) {
-              _showDayEventsSheet(selected, dayEvents);
-            }
           },
           rowHeight: 72,
           calendarStyle: const CalendarStyle(
@@ -140,21 +136,13 @@ class _StyleCalendarScreenState
           data: (_) => const SizedBox.shrink(),
         ),
 
-        // Static hint — always visible below the calendar.
+        // Selected day panel — replaces the static hint.
         Expanded(
-          child: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.touch_app_outlined,
-                    size: 36, color: AppTheme.onSurfaceVar.withValues(alpha: 0.5)),
-                const SizedBox(height: 10),
-                const Text(
-                  'Tap an event date to view details',
-                  style: TextStyle(color: AppTheme.onSurfaceVar),
-                ),
-              ],
-            ),
+          child: _SelectedDayPanel(
+            selectedDay: _selectedDay,
+            events: _selectedDay != null ? _getEventsForDay(_selectedDay!) : [],
+            onAddEvent: () => _showAddEventDialog(_selectedDay ?? DateTime.now()),
+            onEditEvent: _showEventDetailFromPanel,
           ),
         ),
       ],
@@ -192,140 +180,22 @@ class _StyleCalendarScreenState
 
   /// Always shows a list of events for [date].
   /// Tapping an event opens its detail sheet on top.
-  void _showDayEventsSheet(DateTime date, List<CalendarEvent> events) {
+  /// Opens the event detail sheet directly from the inline panel.
+  /// Only one sheet is open so onDelete doesn't need to double-pop.
+  void _showEventDetailFromPanel(CalendarEvent event) {
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (ctx) => DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: events.length == 1 ? 0.4 : 0.55,
-        minChildSize: 0.3,
-        maxChildSize: 0.9,
-        builder: (_, scrollCtrl) => ListView(
-          controller: scrollCtrl,
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-          children: [
-            // Handle
-            Center(
-              child: Container(
-                margin: const EdgeInsets.symmetric(vertical: 12),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppTheme.onSurfaceVar.withValues(alpha: 0.4),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            // Date label
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Text(
-                _formatDate(date),
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16,
-                  color: AppTheme.onBgColor,
-                ),
-              ),
-            ),
-            // One tile per event/occasion — tap to open detail
-            ...events.map((e) => _OccasionListTile(
-                  event: e,
-                  onTap: () => _showEventDetail(ctx, e),
-                  onDelete: () {
-                    Navigator.of(context).pop();
-                    ref.read(calendarProvider.notifier).deleteEvent(e.id);
-                  },
-                )),
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: () {
-                Navigator.of(context).pop();
-                _showAddEventDialog(date);
-              },
-              icon: const Icon(Icons.add),
-              label: const Text('Add Event'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showEventDetail(BuildContext ctx, CalendarEvent event) {
-    showModalBottomSheet(
-      context: ctx,
       isScrollControlled: true,
       useSafeArea: true,
       builder: (_) => _EventDetailSheet(
         event: event,
         onDelete: () {
-          Navigator.of(context).pop();
-          Navigator.of(context).pop();
           ref.read(calendarProvider.notifier).deleteEvent(event.id);
         },
       ),
     );
   }
 
-  String _formatDate(DateTime d) {
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-    ];
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    return '${days[d.weekday % 7]}, ${d.day} ${months[d.month - 1]} ${d.year}';
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Occasion list tile — shown in the day events list sheet
-// ---------------------------------------------------------------------------
-
-class _OccasionListTile extends StatelessWidget {
-  const _OccasionListTile({
-    required this.event,
-    required this.onTap,
-    required this.onDelete,
-  });
-
-  final CalendarEvent event;
-  final VoidCallback onTap;
-  final VoidCallback onDelete;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        leading: const Icon(Icons.celebration_outlined, color: AppTheme.secondary),
-        title: Text(
-          event.title,
-          style: const TextStyle(fontWeight: FontWeight.w600, color: AppTheme.onBgColor),
-        ),
-        subtitle: event.occasion != null
-            ? Text(event.occasion!, style: const TextStyle(color: AppTheme.onSurfaceVar))
-            : null,
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.chevron_right, color: AppTheme.onSurfaceVar),
-            IconButton(
-              icon: const Icon(Icons.delete_outline, size: 18),
-              color: const Color(0xFFB00020),
-              visualDensity: VisualDensity.compact,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-              onPressed: onDelete,
-            ),
-          ],
-        ),
-        onTap: onTap,
-      ),
-    );
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -739,6 +609,308 @@ class _OutfitPickerTile extends ConsumerWidget {
           : Icon(Icons.chevron_right,
               color: isDisabled ? colorScheme.onSurface.withValues(alpha: 0.3) : null),
       onTap: onTap,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Selected-day inline panel — replaces "Tap an event date to view details"
+// ---------------------------------------------------------------------------
+
+class _SelectedDayPanel extends ConsumerWidget {
+  const _SelectedDayPanel({
+    required this.selectedDay,
+    required this.events,
+    required this.onAddEvent,
+    required this.onEditEvent,
+  });
+
+  final DateTime? selectedDay;
+  final List<CalendarEvent> events;
+  final VoidCallback onAddEvent;
+  final void Function(CalendarEvent) onEditEvent;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (selectedDay == null || events.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.touch_app_outlined,
+                size: 36, color: AppTheme.onSurfaceVar.withValues(alpha: 0.5)),
+            const SizedBox(height: 10),
+            Text(
+              selectedDay == null
+                  ? 'Tap a date to view outfit assignments'
+                  : 'No events on this day',
+              style: const TextStyle(color: AppTheme.onSurfaceVar),
+            ),
+            if (selectedDay != null) ...[
+              const SizedBox(height: 12),
+              TextButton.icon(
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('Add Event'),
+                onPressed: onAddEvent,
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    final profilesAsync = ref.watch(profilesProvider);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Divider(height: 1),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 8, 6),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _formatDate(selectedDay!),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                    color: AppTheme.onBgColor,
+                  ),
+                ),
+              ),
+              TextButton.icon(
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('Add Event'),
+                style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                onPressed: onAddEvent,
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: ListView.separated(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+            itemCount: events.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 10),
+            itemBuilder: (_, i) => _EventSummaryCard(
+              event: events[i],
+              profilesAsync: profilesAsync,
+              onEdit: () => onEditEvent(events[i]),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  static String _formatDate(DateTime d) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    return '${days[d.weekday % 7]}, ${d.day} ${months[d.month - 1]} ${d.year}';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Single event summary card shown in the inline panel
+// ---------------------------------------------------------------------------
+
+class _EventSummaryCard extends StatelessWidget {
+  const _EventSummaryCard({
+    required this.event,
+    required this.profilesAsync,
+    required this.onEdit,
+  });
+
+  final CalendarEvent event;
+  final AsyncValue<List<Profile>> profilesAsync;
+  final VoidCallback onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final assignments = event.outfitAssignments; // Map<profileId, outfitId>
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 8, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Event header row
+            Row(
+              children: [
+                const Icon(Icons.celebration_outlined,
+                    size: 16, color: AppTheme.secondary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        event.title,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                          color: AppTheme.onBgColor,
+                        ),
+                      ),
+                      if (event.occasion != null)
+                        Text(
+                          event.occasion!,
+                          style: TextStyle(
+                              fontSize: 11, color: colorScheme.primary),
+                        ),
+                    ],
+                  ),
+                ),
+                TextButton(
+                  onPressed: onEdit,
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                  ),
+                  child: const Text('Edit'),
+                ),
+              ],
+            ),
+
+            // Assigned members
+            if (assignments.isNotEmpty) ...[
+              const Divider(height: 14),
+              profilesAsync.when(
+                loading: () => const SizedBox(
+                  height: 20,
+                  child: LinearProgressIndicator(),
+                ),
+                error: (_, _) => const SizedBox.shrink(),
+                data: (profiles) {
+                  final assigned = profiles
+                      .where((p) => assignments.containsKey(p.id))
+                      .toList();
+                  if (assigned.isEmpty) return const SizedBox.shrink();
+                  return Column(
+                    children: assigned
+                        .map((p) => _AssignedProfileRow(
+                              profile: p,
+                              outfitId: assignments[p.id]!,
+                            ))
+                        .toList(),
+                  );
+                },
+              ),
+            ] else ...[
+              const SizedBox(height: 6),
+              Text(
+                'No outfits assigned yet — tap Edit to assign',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: colorScheme.onSurface.withValues(alpha: 0.5),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Per-profile row inside the event summary card
+// ---------------------------------------------------------------------------
+
+class _AssignedProfileRow extends ConsumerWidget {
+  const _AssignedProfileRow({
+    required this.profile,
+    required this.outfitId,
+  });
+
+  final Profile profile;
+  final String outfitId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final coverAsync = ref.watch(
+      outfitCoverUrlProvider((profileId: profile.id, outfitId: outfitId)),
+    );
+    final outfitsAsync = ref.watch(outfitProvider(profile.id));
+    final outfitName = outfitsAsync.whenOrNull(
+      data: (outfits) =>
+          outfits.where((o) => o.id == outfitId).firstOrNull?.name,
+    );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        children: [
+          // Profile avatar
+          CircleAvatar(
+            radius: 14,
+            backgroundColor: colorScheme.secondaryContainer,
+            backgroundImage: profile.avatarUrl != null
+                ? NetworkImage(profile.avatarUrl!)
+                : null,
+            child: profile.avatarUrl == null
+                ? Text(
+                    profile.name.isNotEmpty
+                        ? profile.name[0].toUpperCase()
+                        : '?',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: colorScheme.onSecondaryContainer,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  )
+                : null,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            profile.name,
+            style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+          ),
+          const SizedBox(width: 6),
+          Icon(Icons.arrow_forward_ios,
+              size: 10, color: AppTheme.onSurfaceVar.withValues(alpha: 0.6)),
+          const SizedBox(width: 6),
+          // Outfit thumbnail
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: SizedBox(
+              width: 36,
+              height: 36,
+              child: coverAsync.when(
+                data: (url) => url != null
+                    ? CachedNetworkImage(imageUrl: url, fit: BoxFit.cover)
+                    : Container(
+                        color: colorScheme.surfaceContainerHighest,
+                        child: Icon(Icons.checkroom,
+                            size: 16, color: colorScheme.onSurfaceVariant),
+                      ),
+                loading: () => Container(
+                    color: colorScheme.surfaceContainerHighest),
+                error: (_, _) => Container(
+                  color: colorScheme.surfaceContainerHighest,
+                  child: Icon(Icons.checkroom,
+                      size: 16, color: colorScheme.onSurfaceVariant),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              outfitName ?? '',
+              style: TextStyle(fontSize: 12, color: colorScheme.primary),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

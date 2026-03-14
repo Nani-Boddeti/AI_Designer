@@ -56,20 +56,20 @@ class UsageNotifier extends AsyncNotifier<UsageState> {
     return UsageState(count: count, limit: limit);
   }
 
-  /// Increments the counter locally and persists to Supabase.
+  /// Increments the counter and updates local state with the server-confirmed count.
   Future<void> increment() async {
     final household = ref.read(authProvider).value?.household;
     if (household == null) return;
 
     final yearMonth = _currentYearMonth();
-    await ref
+    final newCount = await ref
         .read(usageServiceProvider)
         .incrementCount(household.id, yearMonth);
 
-    // Update local state optimistically.
+    // Use server-returned count — accurate even under concurrent calls.
     final current = state.value ?? const UsageState();
     state = AsyncData(UsageState(
-      count: current.count + 1,
+      count: newCount,
       limit: current.limit,
     ));
   }

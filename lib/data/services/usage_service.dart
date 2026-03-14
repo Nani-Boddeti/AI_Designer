@@ -22,18 +22,23 @@ class UsageService {
     return (row?['outfit_count'] as int?) ?? 0;
   }
 
-  /// Increments the outfit count for [householdId] in [yearMonth] by 1.
-  /// Creates the row if it doesn't exist yet.
-  Future<void> incrementCount(String householdId, String yearMonth) async {
-    final current = await getMonthlyCount(householdId, yearMonth);
-    await _client.from(SupabaseTables.householdUsage).upsert(
-      {
-        'household_id': householdId,
-        'year_month': yearMonth,
-        'outfit_count': current + 1,
+  /// Atomically increments the outfit count for [householdId] in [yearMonth]
+  /// by 1 using a DB-level INSERT … ON CONFLICT DO UPDATE.
+  ///
+  /// This replaces the previous read-then-write pattern which had a race
+  /// condition: two concurrent calls would both read the same count and each
+  /// write count+1 instead of count+2, allowing users to exceed their limits.
+  ///
+  /// Returns the new count after increment.
+  Future<int> incrementCount(String householdId, String yearMonth) async {
+    final result = await _client.rpc(
+      'increment_household_usage',
+      params: {
+        'p_household_id': householdId,
+        'p_year_month': yearMonth,
       },
-      onConflict: 'household_id,year_month',
     );
+    return (result as int?) ?? 0;
   }
 }
 
