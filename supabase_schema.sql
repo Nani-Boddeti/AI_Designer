@@ -120,6 +120,22 @@ INSERT INTO app_config (id, min_version, latest_version)
   VALUES ('android', '1.0.0', '1.0.0')
   ON CONFLICT (id) DO NOTHING;
 
+-- Payment transaction log — inserted by verify-razorpay-payment Edge Function.
+CREATE TABLE IF NOT EXISTS payment_transactions (
+  id                   UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id         UUID        NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+  user_id              UUID        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  razorpay_order_id    TEXT        NOT NULL,
+  razorpay_payment_id  TEXT        NOT NULL,
+  tier                 TEXT        NOT NULL CHECK (tier IN ('pro', 'prime')),
+  amount_paise         INTEGER,
+  expires_at           TIMESTAMPTZ,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_payment_transactions_household ON payment_transactions(household_id);
+CREATE INDEX IF NOT EXISTS idx_payment_transactions_created   ON payment_transactions(created_at DESC);
+
 -- FCM device tokens — one token per user per platform.
 CREATE TABLE IF NOT EXISTS device_tokens (
   id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -169,8 +185,10 @@ ALTER TABLE wardrobe_items      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE outfits             ENABLE ROW LEVEL SECURITY;
 ALTER TABLE calendar_events     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE household_usage     ENABLE ROW LEVEL SECURITY;
-ALTER TABLE app_config          ENABLE ROW LEVEL SECURITY;
-ALTER TABLE device_tokens       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app_config              ENABLE ROW LEVEL SECURITY;
+ALTER TABLE device_tokens           ENABLE ROW LEVEL SECURITY;
+ALTER TABLE payment_transactions    ENABLE ROW LEVEL SECURITY;
+-- No user-facing RLS policies on payment_transactions — service role only.
 
 -- ---------------------------------------------------------------------------
 -- Helper function: current_household_id()
@@ -522,3 +540,25 @@ BEGIN
   WHERE user_id = v_caller_id AND active_household_id = p_household_id;
 END;
 $$;
+
+-- ---------------------------------------------------------------------------
+-- Views
+-- ---------------------------------------------------------------------------
+
+-- Backoffice view: payment transactions joined with household name and payer name.
+CREATE OR REPLACE VIEW payment_transactions_view AS
+SELECT
+  pt.id,
+  pt.household_id,
+  h.name                AS household_name,
+  pt.user_id,
+  p.name                AS user_name,
+  pt.razorpay_order_id,
+  pt.razorpay_payment_id,
+  pt.tier,
+  pt.amount_paise,
+  pt.expires_at,
+  pt.created_at
+FROM payment_transactions pt
+LEFT JOIN households h ON h.id = pt.household_id
+LEFT JOIN profiles p   ON p.auth_user_id = pt.user_id;

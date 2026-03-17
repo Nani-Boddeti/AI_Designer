@@ -24,6 +24,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
   late final Razorpay _razorpay;
   bool _processingPayment = false;
   String _targetTier = 'pro'; // which tier the user is trying to subscribe to
+  int? _orderAmountPaise;     // stored from order creation, passed to verify for logging
 
   @override
   void initState() {
@@ -57,6 +58,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
           'signature': response.signature ?? '',
           'tier': _targetTier,
           'household_id': householdId,
+          if (_orderAmountPaise != null) 'amount_paise': _orderAmountPaise,
         },
       );
 
@@ -161,6 +163,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
       if (amount is! int || amount <= 0) {
         throw Exception('Invalid payment amount received from server.');
       }
+      _orderAmountPaise = amount;
 
       final tierLabel = targetTier == 'prime' ? 'Prime' : 'Pro';
       final options = {
