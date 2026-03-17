@@ -70,9 +70,8 @@ class BackgroundRemovalService {
       return response.bodyBytes;
     }
 
-    throw BackgroundRemovalException(
-      'rembg API error ${response.statusCode}: ${response.body}',
-    );
+    debugPrint('[rembg] API error ${response.statusCode}: ${response.body}');
+    throw BackgroundRemovalException('rembg API error ${response.statusCode}');
   }
 
   Future<Uint8List> _removeWithRemoveBg(Uint8List imageBytes) async {
@@ -94,9 +93,8 @@ class BackgroundRemovalService {
       return response.bodyBytes;
     }
 
-    throw BackgroundRemovalException(
-      'remove.bg API error ${response.statusCode}: ${response.body}',
-    );
+    debugPrint('[remove.bg] API error ${response.statusCode}: ${response.body}');
+    throw BackgroundRemovalException('remove.bg API error ${response.statusCode}');
   }
 }
 

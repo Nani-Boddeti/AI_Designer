@@ -2,6 +2,8 @@
 // Scheduled Edge Function — triggered daily via cron-job.org HTTP POST.
 // Finds all households whose paid tier has expired and downgrades them to 'free'.
 //
+// This endpoint is NOT browser-facing — no CORS headers needed.
+//
 // cron-job.org setup:
 //   URL:    https://<PROJECT_REF>.supabase.co/functions/v1/check-tier-expiry
 //   Method: POST
@@ -10,22 +12,15 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: CORS_HEADERS });
-  }
-
   try {
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     if (!serviceRoleKey) {
       return new Response(
-        JSON.stringify({ error: 'Server misconfiguration: missing service role key' }),
-        { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
+        JSON.stringify({ error: 'Server misconfiguration' }),
+        { status: 500, headers: JSON_HEADERS },
       );
     }
 
@@ -34,7 +29,7 @@ Deno.serve(async (req) => {
     if (token !== serviceRoleKey) {
       return new Response(
         JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
+        { status: 401, headers: JSON_HEADERS },
       );
     }
 
@@ -54,13 +49,13 @@ Deno.serve(async (req) => {
 
     return new Response(
       JSON.stringify({ downgraded: count, checkedAt: new Date().toISOString() }),
-      { status: 200, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
+      { status: 200, headers: JSON_HEADERS },
     );
   } catch (err) {
     console.error('[check-tier-expiry] Error:', err);
     return new Response(
-      JSON.stringify({ error: String(err) }),
-      { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
+      JSON.stringify({ error: 'Internal server error' }),
+      { status: 500, headers: JSON_HEADERS },
     );
   }
 });

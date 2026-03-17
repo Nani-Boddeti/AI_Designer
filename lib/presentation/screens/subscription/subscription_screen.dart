@@ -80,12 +80,17 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
       }
     } catch (e, stack) {
       final paymentId = response.paymentId ?? 'unknown';
+      // Only log suffix — full Razorpay payment IDs are financial identifiers
+      // and must not be sent to third-party logging services.
+      final paymentIdSuffix = paymentId.length > 6
+          ? '…${paymentId.substring(paymentId.length - 6)}'
+          : paymentId;
       FirebaseCrashlytics.instance.recordError(
         e,
         stack,
         reason: 'payment-verification-failed',
         fatal: false,
-        information: ['payment_id: $paymentId', 'tier: $_targetTier'],
+        information: ['payment_id_suffix: $paymentIdSuffix', 'tier: $_targetTier'],
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

@@ -163,7 +163,7 @@ Deno.serve(async (req) => {
   } catch (err) {
     console.error('[create-razorpay-order] Error:', err);
     return new Response(
-      JSON.stringify({ error: String(err) }),
+      JSON.stringify({ error: 'Internal server error' }),
       { status: 500 },
     );
   }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -6,6 +8,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 /// foreground message display.
 class NotificationService {
   NotificationService._();
+
+  // Holds the single active token-refresh subscription so we can cancel
+  // before re-subscribing. Without this, each syncToken() call stacks a new
+  // listener and every token rotation triggers N upserts.
+  static StreamSubscription<String>? _tokenRefreshSub;
 
   /// Call once from main() after Firebase.initializeApp().
   static Future<void> initialize() async {
@@ -55,7 +62,10 @@ class NotificationService {
       );
 
       // Keep the token fresh if Firebase rotates it.
-      FirebaseMessaging.instance.onTokenRefresh.listen((newToken) async {
+      // Cancel any previous subscription before creating a new one — prevents
+      // stacking N listeners across multiple syncToken() calls.
+      await _tokenRefreshSub?.cancel();
+      _tokenRefreshSub = FirebaseMessaging.instance.onTokenRefresh.listen((newToken) async {
         try {
           await client.from('device_tokens').upsert(
             {
@@ -76,6 +86,8 @@ class NotificationService {
   /// Deletes the device token from Supabase on sign-out so the user
   /// stops receiving notifications after logging out.
   static Future<void> removeToken(SupabaseClient client, String userId) async {
+    await _tokenRefreshSub?.cancel();
+    _tokenRefreshSub = null;
     try {
       await client
           .from('device_tokens')
