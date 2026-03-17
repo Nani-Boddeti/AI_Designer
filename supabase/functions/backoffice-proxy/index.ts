@@ -42,13 +42,27 @@ const ENTITY_TABLE_MAP: Record<string, {
   'device-tokens':        { table: 'device_tokens',             orderBy: 'user_id',    searchColumn: 'user_id', readOnly: true },
 };
 
-// ── CORS — locked to deployed backoffice origin, * only in dev ────────────────
+// ── CORS ───────────────────────────────────────────────────────────────────────
+// If BACKOFFICE_ORIGIN is not set → allow * (local dev / no restriction).
+// If set → reflect the request Origin only when it matches; otherwise return
+// the configured value (browser will block non-matching origins as intended).
+// Vary: Origin prevents CDN from serving a cached ACAO for the wrong origin.
 function corsHeaders(req: Request): Record<string, string> {
-  const allowedOrigin = Deno.env.get('BACKOFFICE_ORIGIN') ?? '*';
+  const configured = Deno.env.get('BACKOFFICE_ORIGIN');
+  const requestOrigin = req.headers.get('Origin') ?? '';
+
+  let allowedOrigin: string;
+  if (!configured) {
+    allowedOrigin = '*';
+  } else {
+    allowedOrigin = requestOrigin === configured ? requestOrigin : configured;
+  }
+
   return {
     'Access-Control-Allow-Origin': allowedOrigin,
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'authorization, content-type',
+    ...(allowedOrigin !== '*' ? { 'Vary': 'Origin' } : {}),
   };
 }
 
@@ -195,7 +209,7 @@ Deno.serve(async (req) => {
     console.error('[backoffice-proxy] Error:', err);
     return new Response(JSON.stringify({ error: 'Internal server error' }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
     });
   }
 });

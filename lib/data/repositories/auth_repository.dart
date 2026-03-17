@@ -186,25 +186,16 @@ class AuthRepository {
       throw Exception('No household found for that invite code.');
     }
 
-    // Insert without .select() — same RLS reason as createHousehold.
-    await _client
-        .from(SupabaseTables.profiles)
-        .insert({
-          'household_id': household.id,
-          'auth_user_id': user.id,
-          'name': profileName,
-          'age_group': AgeGroup.adult.value,
-          'gender': gender,
-          'style_persona': <String>[],
-          'fit_preferences': <String, dynamic>{},
-          if (skinTone != null) 'skin_tone': skinTone.value,
-        });
-
-    // Insert membership row + persist active household in user_preferences.
-    await _client.from('household_memberships').insert({
-      'user_id': user.id,
-      'household_id': household.id,
-      'is_admin': false,
+    // Insert profile + membership atomically via SECURITY DEFINER RPC.
+    // The RPC validates the invite code, inserts the profile (bypassing the
+    // memberless-household guard on profiles_insert), then inserts the
+    // membership row (bypassing the first-member-only memberships_insert policy).
+    await _client.rpc('join_household_with_invite', params: {
+      'p_household_id': household.id,
+      'p_invite_code': inviteCode,
+      'p_profile_name': profileName,
+      'p_gender': gender,
+      if (skinTone != null) 'p_skin_tone': skinTone.value,
     });
     await _service.upsertActiveHousehold(user.id, household.id);
 

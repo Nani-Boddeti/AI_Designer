@@ -273,12 +273,15 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       }
 
       if (missing.isNotEmpty) {
-        // household_select_for_join (USING true) allows reading any household.
-        final householdsData = await svc.client
-            .from('households')
-            .select()
-            .inFilter('id', missing.keys.toList());
-        result = (householdsData as List)
+        // SECURITY DEFINER RPC — scoped to households where caller has a
+        // profile row (auth_user_id = auth.uid()). Replaces direct table query
+        // which broke when the broad household_select_for_join policy was
+        // replaced by the membership-scoped household_select_own policy.
+        final householdsData = await svc.client.rpc(
+          'get_households_by_ids_for_backfill',
+          params: {'p_ids': missing.keys.toList()},
+        ) as List<dynamic>;
+        result = householdsData
             .map((h) => Household.fromJson(h as Map<String, dynamic>))
             .toList();
       }
@@ -286,20 +289,11 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       // Fetch failed — return whatever we collected before the error.
     }
 
-    // ── Backfill phase — fire-and-forget, never blocks or hides result ──────
-    if (result.isNotEmpty) {
-      unawaited(() async {
-        try {
-          for (final h in result) {
-            await svc.client.from('household_memberships').insert({
-              'user_id': userId,
-              'household_id': h.id,
-              'is_admin': missing[h.id] ?? false,
-            });
-          }
-        } catch (_) {}
-      }());
-    }
+    // Backfill INSERT intentionally removed — the one-time SQL migration already
+    // created membership rows for all legacy users. An RPC-based re-insert would
+    // allow ex-members (whose profiles are retained after leave_household) to
+    // rejoin without an invite. Any user genuinely missing a membership row after
+    // the migration should rejoin via invite code.
 
     return result;
   }

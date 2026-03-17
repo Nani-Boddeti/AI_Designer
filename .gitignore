@@ -46,6 +46,7 @@ app.*.map.json
 
 # Environment secrets
 .env
+/android/key.properties
 .claude/
 .knownPackages
 
@@ -57,4 +58,3 @@ lib/firebase_options.dart
 pubspec.lock
 build/
 build_apk.sh
-.github/

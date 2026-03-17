@@ -20,8 +20,8 @@ async function proxyRequest<T>(body: object): Promise<T> {
   return json as T;
 }
 
-export async function proxyList(entityKey: string, search: string): Promise<any[]> {
-  const result = await proxyRequest<{ data: any[] }>({ action: 'list', entityKey, search });
+export async function proxyList(entityKey: string, search: string): Promise<Record<string, unknown>[]> {
+  const result = await proxyRequest<{ data: Record<string, unknown>[] }>({ action: 'list', entityKey, search });
   return result.data;
 }
 

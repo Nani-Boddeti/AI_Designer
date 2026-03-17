@@ -70,12 +70,22 @@ async function fetchRazorpayOrder(
   return res.json() as Promise<RazorpayOrder>;
 }
 
-// ── Verify the order was actually created for the claimed tier ────────────────
-// Amount is intentionally NOT checked here: TierCalculator runs in Dart and
-// re-running it server-side would require a second DB round-trip + risk of
-// race conditions from dynamic pricing. Tier-from-notes closes the attack surface.
-function verifyOrderTier(order: RazorpayOrder, claimedTier: string): boolean {
-  return order.notes?.tier === claimedTier;
+// ── Verify the order matches the claimed tier, household, and user ────────────
+// Prevents two replay attacks:
+//   1. Tier-substitution: reuse a valid pro HMAC to claim prime
+//   2. Household-replay: use a paid order for household A to upgrade household B
+//      (possible when caller is a member of both)
+function verifyOrderBinding(
+  order: RazorpayOrder,
+  claimedTier: string,
+  householdId: string,
+  userId: string,
+): boolean {
+  return (
+    order.notes?.tier         === claimedTier &&
+    order.notes?.household_id === householdId &&
+    order.notes?.user_id      === userId
+  );
 }
 
 // ── Handler ───────────────────────────────────────────────────────────────────
@@ -120,8 +130,8 @@ Deno.serve(async (req) => {
       );
     }
 
-    // ── 3. Cross-check tier against Razorpay's canonical order record ─────────
-    // Prevents tier-substitution: a valid pro-tier HMAC cannot be used to claim prime.
+    // ── 3. Cross-check order binding against Razorpay's canonical record ──────
+    // Prevents tier-substitution AND household-replay attacks.
     // Fail closed: if Razorpay API is unreachable, reject rather than grant tier.
     const keyId = Deno.env.get('RAZORPAY_KEY_ID')!;
     const razorpayOrder = await fetchRazorpayOrder(order_id, keyId, keySecret);
@@ -134,12 +144,13 @@ Deno.serve(async (req) => {
       );
     }
 
-    if (!verifyOrderTier(razorpayOrder, tier)) {
+    if (!verifyOrderBinding(razorpayOrder, tier, household_id, user.id)) {
       console.error(
-        `[verify-razorpay-payment] Tier mismatch: order ${order_id.slice(0, 8)} notes.tier=${razorpayOrder.notes?.tier} claimed=${tier}`,
+        `[verify-razorpay-payment] Order binding mismatch: order ${order_id.slice(0, 8)} ` +
+        `notes=${JSON.stringify(razorpayOrder.notes)} claimed tier=${tier} household=${household_id.slice(0, 8)}`,
       );
       return new Response(
-        JSON.stringify({ success: false, error: 'Payment tier mismatch' }),
+        JSON.stringify({ success: false, error: 'Payment verification failed' }),
         { status: 400 },
       );
     }
@@ -160,30 +171,27 @@ Deno.serve(async (req) => {
       );
     }
 
-    // ── Upgrade the household tier ────────────────────────────────────────────
+    // ── 5. Atomic insert + tier upgrade via SECURITY DEFINER RPC ─────────────
+    // process_verified_payment runs both the payment_transactions INSERT and the
+    // households UPDATE in a single DB transaction — partial failure is impossible.
+    // Returns true = newly processed, false = already processed (idempotent success).
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
-    const { error: updateErr } = await supabase
-      .from('households')
-      .update({ tier, tier_expires_at: expiresAt })
-      .eq('id', household_id);
-
-    if (updateErr) throw updateErr;
-
-    // ── Log payment transaction (fire-and-forget) ─────────────────────────────
-    supabase.from('payment_transactions').insert({
-      household_id,
-      user_id: user.id,
-      razorpay_order_id: order_id,
-      razorpay_payment_id: payment_id,
-      tier,
-      amount_paise: amount_paise ?? null,
-      expires_at: expiresAt,
-    }).then(({ error }) => {
-      if (error) console.error('[verify-razorpay-payment] Failed to log transaction:', error.message);
+    const { data: isNew, error: processErr } = await supabase.rpc('process_verified_payment', {
+      p_household_id: household_id,
+      p_user_id: user.id,
+      p_order_id: order_id,
+      p_payment_id: payment_id,
+      p_tier: tier,
+      p_amount_paise: amount_paise ?? null,
+      p_expires_at: expiresAt,
     });
 
-    console.log(`[verify-razorpay-payment] Tier updated household=${household_id.slice(0, 8)} tier=${tier}`);
+    if (processErr) throw processErr;
+
+    console.log(
+      `[verify-razorpay-payment] household=${household_id.slice(0, 8)} tier=${tier} new=${isNew}`,
+    );
 
     return new Response(
       JSON.stringify({ success: true, tier, expires_at: expiresAt }),
