@@ -29,20 +29,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = async (email: string, password: string): Promise<string | null> => {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) return error.message;
-
-    const adminEmails = (import.meta.env.VITE_ADMIN_EMAILS as string | undefined) ?? '';
-    const allowed = adminEmails
-      .split(',')
-      .map((e) => e.trim())
-      .filter(Boolean);
-
-    if (!allowed.includes(data.user?.email ?? '')) {
-      await supabase.auth.signOut();
-      return 'Access denied: not an admin';
-    }
-
+    // Admin allowlist is enforced server-side in backoffice-proxy on every API call.
+    // No client-side email check — it was UI theater (env var was visible in the bundle).
     return null;
   };
 
