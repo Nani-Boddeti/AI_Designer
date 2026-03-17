@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -6,6 +8,27 @@ plugins {
     id("com.google.gms.google-services")
     id("com.google.firebase.crashlytics")
 }
+
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
+}
+
+val keystorePath = System.getenv("KEYSTORE_PATH")
+    ?: keystoreProperties.getProperty("KEYSTORE_PATH")
+val storePasswordValue = System.getenv("STORE_PASSWORD")
+    ?: keystoreProperties.getProperty("STORE_PASSWORD")
+val keyAliasValue = System.getenv("KEY_ALIAS")
+    ?: keystoreProperties.getProperty("KEY_ALIAS")
+val keyPasswordValue = System.getenv("KEY_PASSWORD")
+    ?: keystoreProperties.getProperty("KEY_PASSWORD")
+
+val hasReleaseSigning = !keystorePath.isNullOrBlank() &&
+    !storePasswordValue.isNullOrBlank() &&
+    !keyAliasValue.isNullOrBlank() &&
+    !keyPasswordValue.isNullOrBlank() &&
+    keystorePath?.let { rootProject.file(it).exists() } == true
 
 android {
     namespace = "com.aidesigner.ai_designer_assist"
@@ -24,7 +47,7 @@ android {
     defaultConfig {
         applicationId = "com.aidesigner.ai_designer_assist"
         minSdk = flutter.minSdkVersion
-        targetSdk = 34
+        targetSdk = 35
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         multiDexEnabled = true
@@ -32,21 +55,20 @@ android {
 
     signingConfigs {
         create("release") {
-            val keystorePath = System.getenv("KEYSTORE_PATH")
-            if (keystorePath != null) {
-                storeFile = file(keystorePath)
-                storePassword = System.getenv("STORE_PASSWORD") ?: ""
-                keyAlias = System.getenv("KEY_ALIAS") ?: ""
-                keyPassword = System.getenv("KEY_PASSWORD") ?: ""
+            if (hasReleaseSigning) {
+                storeFile = rootProject.file(keystorePath!!)
+                storePassword = storePasswordValue!!
+                keyAlias = keyAliasValue!!
+                keyPassword = keyPasswordValue!!
             }
         }
     }
 
     buildTypes {
         release {
-            // Uses release keystore when KEYSTORE_PATH env var is set (CI/CD).
-            // Falls back to debug keys for local `flutter run --release`.
-            signingConfig = if (System.getenv("KEYSTORE_PATH") != null) {
+            // Uses release keystore from env vars or android/key.properties.
+            // Falls back to debug signing when any release signing input is missing.
+            signingConfig = if (hasReleaseSigning) {
                 signingConfigs.getByName("release")
             } else {
                 signingConfigs.getByName("debug")

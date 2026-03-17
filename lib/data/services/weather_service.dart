@@ -42,7 +42,7 @@ class WeatherService {
   /// Result map keys: temp_c (double), description (String), icon (String),
   /// humidity (int), wind_kph (double).
   ///
-  /// Uses Hive to cache results for 6 hours.
+  /// Uses Hive to cache results per calendar day (one fetch per day per location).
   Future<Map<String, dynamic>> getWeather({
     required double lat,
     required double lon,

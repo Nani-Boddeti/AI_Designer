@@ -173,14 +173,16 @@ class SupabaseService {
   }
 
   Future<Household?> getHouseholdByInviteCode(String code) async {
-    final data = await _client
-        .from(SupabaseTables.households)
-        .select()
-        .eq('invite_code', code)
-        .maybeSingle();
+    // Uses a SECURITY DEFINER RPC instead of direct table access.
+    // The households table SELECT policy is now scoped to the caller's own
+    // memberships; this RPC is the only path for pre-join invite-code lookup.
+    final rows = await _client.rpc(
+      'lookup_household_by_invite_code',
+      params: {'p_code': code},
+    ) as List<dynamic>;
 
-    if (data == null) return null;
-    return Household.fromJson(data);
+    if (rows.isEmpty) return null;
+    return Household.fromJson(rows.first as Map<String, dynamic>);
   }
 
   // ---------------------------------------------------------------------------
