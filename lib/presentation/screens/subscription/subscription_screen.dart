@@ -156,13 +156,6 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
         throw Exception(data?['error'] ?? 'Failed to create order');
       }
 
-      // Validate that the key_id from the server matches our configured key —
-      // prevents a compromised Edge Function from redirecting payments.
-      const expectedKeyId = String.fromEnvironment('RAZORPAY_KEY_ID');
-      if (expectedKeyId.isNotEmpty && data['key_id'] != expectedKeyId) {
-        throw Exception('Payment configuration error. Please contact support.');
-      }
-
       // Sanity-check amount before opening Razorpay.
       final amount = data['amount'];
       if (amount is! int || amount <= 0) {

@@ -11,9 +11,10 @@ import 'core/theme/app_theme.dart';
 import 'firebase_options.dart';
 import 'router/app_router.dart';
 
-// Keys are injected at build time via --dart-define (never bundled in APK).
-const _supabaseUrl = String.fromEnvironment('SUPABASE_URL');
-const _supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
+// Public Supabase credentials — not secrets; data is protected by RLS policies.
+const _supabaseUrl = 'https://vrtwsapfzmywfauqbrtg.supabase.co';
+const _supabaseAnonKey =
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZydHdzYXBmem15d2ZhdXFicnRnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0NzQ1NDcsImV4cCI6MjA4ODA1MDU0N30.BVOzGk64fV3FwwOCtmDu0pLEaJmL_C0IKUAAZtKzYG0';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

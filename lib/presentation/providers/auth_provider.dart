@@ -452,10 +452,18 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       final svc = ref.read(supabaseServiceProvider);
       // Use RPC instead of Edge Function — avoids JWT edge cases with
       // the functions gateway; uses the same auth path as all other DB calls.
-      await svc.client.rpc(
-        'leave_household',
-        params: {'p_household_id': householdId},
-      );
+      try {
+        await svc.client.rpc(
+          'leave_household',
+          params: {'p_household_id': householdId},
+        );
+      } on PostgrestException catch (e) {
+        // Legacy household: user has a profile row but no membership row
+        // (pre-dates the household_memberships table). The RPC throws P0001
+        // because it only looks at membership rows. Treat as a soft leave —
+        // no DB change needed since there is no membership row to delete.
+        if (e.code != 'P0001' || !(e.message.contains('Not a member'))) rethrow;
+      }
 
       // Persist the left household ID so _fetchAndBackfillMissingHouseholds
       // never re-adds it on subsequent app starts (RPC removes the membership

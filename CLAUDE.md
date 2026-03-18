@@ -9,13 +9,7 @@ See `ARCHITECTURE.md` for architecture overview, data layer details, schema, con
 All Flutter commands require `ANDROID_SDK_ROOT` to be set:
 
 ```bash
-ANDROID_SDK_ROOT="/Users/nani/Library/Android/sdk" flutter run \
-  --dart-define=SUPABASE_URL="..." \
-  --dart-define=SUPABASE_ANON_KEY="..." \
-  --dart-define=GEMINI_API_KEY="..." \
-  --dart-define=REMOVE_BG_API_KEY="..." \
-  --dart-define=OPENWEATHER_API_KEY="..." \
-  --dart-define=RAZORPAY_KEY_ID="..."
+ANDROID_SDK_ROOT="/Users/nani/Library/Android/sdk" flutter run
 
 ./build_apk.sh [debug|release]
 
@@ -24,7 +18,8 @@ ANDROID_SDK_ROOT="/Users/nani/Library/Android/sdk" flutter pub get
 ANDROID_SDK_ROOT="/Users/nani/Library/Android/sdk" flutter test test/path/to/test.dart
 ```
 
-API keys are never in source — passed via `--dart-define`, read via `String.fromEnvironment(...)`.
+API keys are stored as Supabase secrets and never reach the client. All external API calls
+(Gemini, background removal, OpenWeather) are proxied through JWT-authenticated Edge Functions.
 
 ## Critical Patterns
 
