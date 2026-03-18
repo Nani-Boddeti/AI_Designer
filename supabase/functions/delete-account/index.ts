@@ -12,12 +12,13 @@
 // Request: POST (no body — user is identified from JWT)
 // Response: { success: true } | { error: string }
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+// deno-lint-ignore-file no-explicit-any
+import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 // Wardrobe path: wardrobe/{profileId}/{itemId}/file — two levels deep.
 // Avatar path:   avatars/{profileId}/file        — one level deep.
 async function deleteProfileStorage(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient<any, any, any>,
   profileId: string,
 ): Promise<void> {
   // wardrobe-images and processed-images share the same path structure.
