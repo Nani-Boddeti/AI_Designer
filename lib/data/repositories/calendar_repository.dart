@@ -74,40 +74,27 @@ class CalendarRepository {
 
   Future<CalendarEvent> assignOutfit(
       String eventId, String profileId, String outfitId) async {
-    final row = await _service.client
-        .from(SupabaseTables.calendarEvents)
-        .select()
-        .eq('id', eventId)
-        .single();
-    final event = CalendarEvent.fromJson(row);
-    final updated = Map<String, String>.from(event.outfitAssignments)
-      ..[profileId] = outfitId;
-    final data = await _service.client
-        .from(SupabaseTables.calendarEvents)
-        .update({'outfit_assignments': updated})
-        .eq('id', eventId)
-        .select()
-        .single();
-    return CalendarEvent.fromJson(data);
+    final rows = await _service.client.rpc(
+      'assign_outfit_to_event',
+      params: {
+        'p_event_id': eventId,
+        'p_profile_id': profileId,
+        'p_outfit_id': outfitId,
+      },
+    ) as List<dynamic>;
+    return CalendarEvent.fromJson(rows.first as Map<String, dynamic>);
   }
 
   Future<CalendarEvent> removeOutfitAssignment(
       String eventId, String profileId) async {
-    final row = await _service.client
-        .from(SupabaseTables.calendarEvents)
-        .select()
-        .eq('id', eventId)
-        .single();
-    final event = CalendarEvent.fromJson(row);
-    final updated = Map<String, String>.from(event.outfitAssignments)
-      ..remove(profileId);
-    final data = await _service.client
-        .from(SupabaseTables.calendarEvents)
-        .update({'outfit_assignments': updated})
-        .eq('id', eventId)
-        .select()
-        .single();
-    return CalendarEvent.fromJson(data);
+    final rows = await _service.client.rpc(
+      'remove_outfit_from_event',
+      params: {
+        'p_event_id': eventId,
+        'p_profile_id': profileId,
+      },
+    ) as List<dynamic>;
+    return CalendarEvent.fromJson(rows.first as Map<String, dynamic>);
   }
 
   /// Returns events for a specific date range.

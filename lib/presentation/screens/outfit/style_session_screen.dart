@@ -1,10 +1,8 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:geolocator/geolocator.dart';
 
-import '../../../core/config/dev_config.dart';
 import '../../../core/utils/error_utils.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../data/models/profile.dart';
@@ -181,19 +179,15 @@ class _StyleSessionScreenState extends ConsumerState<StyleSessionScreen> {
   Future<void> _generateOutfits(List<Profile> allProfiles) async {
     if (!_validate()) return;
 
-    // Check usage limit; bypass in debug builds when dev switch is on.
-    final bypass = kDebugMode && ref.read(devBypassLimitsProvider);
-    if (!bypass) {
-      UsageState usage;
-      try {
-        usage = await ref.read(usageNotifierProvider.future);
-      } catch (_) {
-        usage = const UsageState();
-      }
-      if (!usage.canGenerate) {
-        _showLimitDialog(usage);
-        return;
-      }
+    UsageState usage;
+    try {
+      usage = await ref.read(usageNotifierProvider.future);
+    } catch (_) {
+      usage = const UsageState();
+    }
+    if (!usage.canGenerate) {
+      _showLimitDialog(usage);
+      return;
     }
 
     setState(() => _generating = true);

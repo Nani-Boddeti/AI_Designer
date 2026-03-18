@@ -1,10 +1,8 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/config/dev_config.dart';
 import '../../../core/utils/error_utils.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/widgets/vault_logo.dart';
@@ -179,7 +177,6 @@ class _MoreTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authProvider).value;
     final usageAsync = ref.watch(usageNotifierProvider);
-    final bypass = ref.watch(devBypassLimitsProvider);
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -305,19 +302,6 @@ class _MoreTab extends ConsumerWidget {
                   : null,
             );
           }),
-
-          // Dev settings — only visible in debug builds
-          if (kDebugMode) ...[
-            const Divider(),
-            SwitchListTile(
-              secondary: const Icon(Icons.bug_report_outlined),
-              title: const Text('Dev: Bypass usage limits'),
-              subtitle: const Text('Debug builds only'),
-              value: bypass,
-              onChanged: (v) =>
-                  ref.read(devBypassLimitsProvider.notifier).set(v),
-            ),
-          ],
 
           const Divider(),
           _MoreTile(

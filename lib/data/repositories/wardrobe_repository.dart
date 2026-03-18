@@ -85,10 +85,35 @@ class WardrobeRepository {
   }
 
   Future<void> deleteItem(String itemId) async {
+    // Fetch paths before deletion so we can clean up storage objects.
+    final row = await supabaseService.client
+        .from(SupabaseTables.wardrobeItems)
+        .select('profile_id, processed_image_url')
+        .eq('id', itemId)
+        .maybeSingle();
+
     await supabaseService.client
         .from(SupabaseTables.wardrobeItems)
         .delete()
         .eq('id', itemId);
+
+    // Best-effort storage cleanup — DB row is already gone so errors are non-fatal.
+    if (row != null) {
+      final profileId = row['profile_id'] as String?;
+      if (profileId != null) {
+        try {
+          await Future.wait([
+            supabaseService.client.storage
+                .from(SupabaseBuckets.wardrobeImages)
+                .remove(['wardrobe/$profileId/$itemId/original.jpg']),
+            if (row['processed_image_url'] != null)
+              supabaseService.client.storage
+                  .from(SupabaseBuckets.processedImages)
+                  .remove(['wardrobe/$profileId/$itemId/processed.png']),
+          ]);
+        } catch (_) {}
+      }
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -174,7 +199,7 @@ class WardrobeRepository {
       );
     }
 
-    // Step 5: Insert record
+    // Step 5: Insert record — on failure, clean up uploaded storage files.
     onStep?.call('Saving to wardrobe…');
     final record = {
       'id': itemId,
@@ -198,11 +223,29 @@ class WardrobeRepository {
       'is_private': isPrivate,
     };
 
-    final data = await supabaseService.client
-        .from(SupabaseTables.wardrobeItems)
-        .insert(record)
-        .select()
-        .single();
+    late final Map<String, dynamic> data;
+    try {
+      data = await supabaseService.client
+          .from(SupabaseTables.wardrobeItems)
+          .insert(record)
+          .select()
+          .single();
+    } catch (insertErr) {
+      // Best-effort: remove uploaded files so storage doesn't accumulate orphans.
+      // Storage cleanup failure is swallowed — the insert error is what matters.
+      try {
+        await Future.wait([
+          supabaseService.client.storage
+              .from(SupabaseBuckets.wardrobeImages)
+              .remove([originalPath]),
+          if (processedImageUrl != null)
+            supabaseService.client.storage
+                .from(SupabaseBuckets.processedImages)
+                .remove(['wardrobe/$profileId/$itemId/processed.png']),
+        ]);
+      } catch (_) {}
+      rethrow;
+    }
 
     return _signItemUrls(WardrobeItem.fromJson(data));
   }

@@ -183,7 +183,7 @@ Deno.serve(async (req) => {
       p_order_id: order_id,
       p_payment_id: payment_id,
       p_tier: tier,
-      p_amount_paise: amount_paise ?? null,
+      p_amount_paise: razorpayOrder.amount,  // canonical value from Razorpay, not client-supplied
       p_expires_at: expiresAt,
     });
 

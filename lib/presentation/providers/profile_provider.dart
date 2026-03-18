@@ -81,7 +81,10 @@ class ProfilesNotifier extends AsyncNotifier<List<Profile>> {
     final svc = ref.read(supabaseServiceProvider);
     final json = profile.toJson()
       ..remove('id')
-      ..remove('created_at');
+      ..remove('created_at')
+      ..remove('household_id')   // immutable — set at creation
+      ..remove('auth_user_id')   // immutable — set at creation
+      ..remove('is_admin');      // immutable via client — only service-role RPCs may change
 
     final data = await svc.client
         .from(SupabaseTables.profiles)

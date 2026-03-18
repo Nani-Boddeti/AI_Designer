@@ -100,6 +100,7 @@ CREATE TABLE IF NOT EXISTS wardrobe_items (
   brand               TEXT,
   size                TEXT,
   ai_description      TEXT,
+  is_private          BOOLEAN     NOT NULL DEFAULT false,
   created_at          TIMESTAMPTZ DEFAULT now()
 );
 
@@ -217,10 +218,24 @@ ON CONFLICT (id) DO UPDATE SET public = EXCLUDED.public;
 -- matching the wardrobe_items and profiles RLS policies.
 
 -- ── wardrobe-images ───────────────────────────────────────────────────────────
+-- Path: wardrobe/{profileId}/{itemId}/original.jpg  (positions 2 and 3)
+DROP POLICY IF EXISTS "wardrobe_images_select" ON storage.objects;
 CREATE POLICY "wardrobe_images_select" ON storage.objects FOR SELECT USING (
   bucket_id = 'wardrobe-images'
   AND split_part(name, '/', 2)::uuid IN (
     SELECT id FROM profiles WHERE household_id = current_household_id()
+  )
+  AND (
+    -- Own profile: always readable
+    split_part(name, '/', 2)::uuid IN (
+      SELECT id FROM profiles WHERE auth_user_id = auth.uid() AND household_id = current_household_id()
+    )
+    -- Other household member: only if item is not private
+    OR NOT EXISTS (
+      SELECT 1 FROM wardrobe_items wi
+      WHERE wi.id = split_part(name, '/', 3)::uuid
+        AND wi.is_private = true
+    )
   )
 );
 CREATE POLICY "wardrobe_images_insert" ON storage.objects FOR INSERT WITH CHECK (
@@ -246,10 +261,22 @@ CREATE POLICY "wardrobe_images_delete" ON storage.objects FOR DELETE USING (
 );
 
 -- ── processed-images ──────────────────────────────────────────────────────────
+-- Path: wardrobe/{profileId}/{itemId}/processed.png  (positions 2 and 3)
+DROP POLICY IF EXISTS "processed_images_select" ON storage.objects;
 CREATE POLICY "processed_images_select" ON storage.objects FOR SELECT USING (
   bucket_id = 'processed-images'
   AND split_part(name, '/', 2)::uuid IN (
     SELECT id FROM profiles WHERE household_id = current_household_id()
+  )
+  AND (
+    split_part(name, '/', 2)::uuid IN (
+      SELECT id FROM profiles WHERE auth_user_id = auth.uid() AND household_id = current_household_id()
+    )
+    OR NOT EXISTS (
+      SELECT 1 FROM wardrobe_items wi
+      WHERE wi.id = split_part(name, '/', 3)::uuid
+        AND wi.is_private = true
+    )
   )
 );
 CREATE POLICY "processed_images_insert" ON storage.objects FOR INSERT WITH CHECK (
@@ -429,8 +456,17 @@ CREATE POLICY "profiles_insert" ON profiles
     OR (auth_user_id IS NULL AND household_id = current_household_id())
   );
 
+-- SECURITY DEFINER helper: reads is_admin without triggering RLS recursion.
+-- Used by profiles_update WITH CHECK to verify is_admin is not being changed.
+CREATE OR REPLACE FUNCTION get_profile_is_admin(p_profile_id UUID)
+RETURNS BOOLEAN LANGUAGE sql SECURITY DEFINER STABLE
+SET search_path = public AS $$
+  SELECT COALESCE((SELECT is_admin FROM profiles WHERE id = p_profile_id), false);
+$$;
+
 -- Users can edit their own profile; admins can edit any profile in the household.
--- is_admin cannot be changed through this policy — only Edge Functions (service role) can.
+-- is_admin cannot be changed through this policy — only service-role RPCs can.
+DROP POLICY IF EXISTS "profiles_update" ON profiles;
 CREATE POLICY "profiles_update" ON profiles
   FOR UPDATE USING (
     household_id = current_household_id()
@@ -445,7 +481,8 @@ CREATE POLICY "profiles_update" ON profiles
     )
   )
   WITH CHECK (
-    is_admin = (SELECT is_admin FROM profiles p WHERE p.id = id)
+    -- Non-recursive: uses SECURITY DEFINER function to read current is_admin
+    is_admin = get_profile_is_admin(id)
     OR EXISTS (
       SELECT 1 FROM household_memberships
       WHERE user_id = auth.uid()
@@ -505,9 +542,18 @@ CREATE POLICY "user_prefs_own" ON user_preferences
 
 -- ── Wardrobe items ───────────────────────────────────────────────────────────
 
+DROP POLICY IF EXISTS "wardrobe_select" ON wardrobe_items;
 CREATE POLICY "wardrobe_select" ON wardrobe_items
   FOR SELECT USING (
     profile_id IN (SELECT id FROM profiles WHERE household_id = current_household_id())
+    AND (
+      NOT is_private
+      OR profile_id = (
+        SELECT id FROM profiles
+        WHERE auth_user_id = auth.uid()
+          AND household_id = current_household_id()
+      )
+    )
   );
 
 CREATE POLICY "wardrobe_insert" ON wardrobe_items
@@ -1013,3 +1059,59 @@ SELECT
 FROM payment_transactions pt
 LEFT JOIN households h ON h.id = pt.household_id
 LEFT JOIN profiles p   ON p.auth_user_id = pt.user_id;
+
+-- ---------------------------------------------------------------------------
+-- Migrations (idempotent — safe to re-run)
+-- ---------------------------------------------------------------------------
+
+-- Add is_private column to wardrobe_items (was missing from initial schema).
+ALTER TABLE wardrobe_items ADD COLUMN IF NOT EXISTS is_private BOOLEAN NOT NULL DEFAULT false;
+
+-- household_usage integrity constraints.
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'household_usage_year_month_fmt'
+  ) THEN
+    ALTER TABLE household_usage
+      ADD CONSTRAINT household_usage_year_month_fmt
+      CHECK (year_month ~ '^\d{4}-\d{2}$');
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'household_usage_count_nonneg'
+  ) THEN
+    ALTER TABLE household_usage
+      ADD CONSTRAINT household_usage_count_nonneg
+      CHECK (outfit_count >= 0);
+  END IF;
+END $$;
+
+-- ---------------------------------------------------------------------------
+-- Calendar outfit assignment — atomic RPCs (replace read-modify-write)
+-- ---------------------------------------------------------------------------
+
+-- Atomically sets outfit_assignments[profileId] = outfitId using JSONB merge.
+-- Runs in caller's security context so calendar_update RLS applies automatically.
+CREATE OR REPLACE FUNCTION assign_outfit_to_event(
+  p_event_id   UUID,
+  p_profile_id TEXT,
+  p_outfit_id  TEXT
+) RETURNS SETOF calendar_events LANGUAGE sql AS $$
+  UPDATE calendar_events
+  SET outfit_assignments = outfit_assignments || jsonb_build_object(p_profile_id, p_outfit_id)
+  WHERE id = p_event_id
+  RETURNING *;
+$$;
+
+-- Atomically removes profileId key from outfit_assignments.
+CREATE OR REPLACE FUNCTION remove_outfit_from_event(
+  p_event_id   UUID,
+  p_profile_id TEXT
+) RETURNS SETOF calendar_events LANGUAGE sql AS $$
+  UPDATE calendar_events
+  SET outfit_assignments = outfit_assignments - p_profile_id
+  WHERE id = p_event_id
+  RETURNING *;
+$$;
