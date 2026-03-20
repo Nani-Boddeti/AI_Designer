@@ -94,6 +94,17 @@ class AuthRepository {
     await _client.auth.resend(type: OtpType.signup, email: email);
   }
 
+  Future<void> sendPasswordReset(String email) async {
+    await _client.auth.resetPasswordForEmail(
+      email,
+      redirectTo: 'io.supabase.aidesignerassist://login-callback',
+    );
+  }
+
+  Future<void> updatePassword(String newPassword) async {
+    await _client.auth.updateUser(UserAttributes(password: newPassword));
+  }
+
   User? get currentUser => _service.getCurrentUser();
 
   Stream<AuthState> get authStateChanges => _client.auth.onAuthStateChange;

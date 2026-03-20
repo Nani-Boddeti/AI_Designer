@@ -279,6 +279,8 @@ class _MoreTab extends ConsumerWidget {
             if (household == null || currentProfile == null) {
               return const SizedBox.shrink();
             }
+            // Only admins can see and toggle this setting.
+            if (!currentProfile.isAdmin) return const SizedBox.shrink();
             return SwitchListTile(
               secondary: const Icon(Icons.tune_outlined),
               title: const Text('Scale suggestions with family size'),
@@ -288,22 +290,25 @@ class _MoreTab extends ConsumerWidget {
                     : 'Fixed limits and price for all plan sizes',
               ),
               value: household.dynamicPricing,
-              onChanged: currentProfile.isAdmin
-                  ? (v) async {
-                      await ref
-                          .read(supabaseServiceProvider)
-                          .client
-                          .from(SupabaseTables.households)
-                          .update({'dynamic_pricing': v})
-                          .eq('id', household.id);
-                      ref.invalidate(authProvider);
-                      ref.invalidate(usageNotifierProvider);
-                    }
-                  : null,
+              onChanged: (v) async {
+                await ref
+                    .read(supabaseServiceProvider)
+                    .client
+                    .from(SupabaseTables.households)
+                    .update({'dynamic_pricing': v})
+                    .eq('id', household.id);
+                ref.invalidate(authProvider);
+                ref.invalidate(usageNotifierProvider);
+              },
             );
           }),
 
           const Divider(),
+          _MoreTile(
+            icon: Icons.lock_reset_outlined,
+            title: 'Change Password',
+            onTap: () => context.push(AppRoutes.resetPassword),
+          ),
           _MoreTile(
             icon: Icons.logout,
             title: 'Sign Out',

@@ -31,6 +31,7 @@ class AuthState {
     this.adminHouseholdIds = const {},
     this.isLoading = false,
     this.error,
+    this.isPasswordRecovery = false,
   });
 
   final User? user;
@@ -43,6 +44,10 @@ class AuthState {
 
   final bool isLoading;
   final String? error;
+
+  /// True when the app was opened via a password-recovery deep link.
+  /// Router redirects to /reset-password while this is true.
+  final bool isPasswordRecovery;
 
   bool get isAuthenticated => user != null;
   bool get hasProfile => profile != null;
@@ -67,6 +72,7 @@ class AuthState {
     List<Household>? allHouseholds,
     Set<String>? adminHouseholdIds,
     bool? isLoading,
+    bool? isPasswordRecovery,
     // Pass null to clear, omit entirely to keep the existing value.
     Object? error = _kKeepError,
   }) {
@@ -77,6 +83,7 @@ class AuthState {
       allHouseholds: allHouseholds ?? this.allHouseholds,
       adminHouseholdIds: adminHouseholdIds ?? this.adminHouseholdIds,
       isLoading: isLoading ?? this.isLoading,
+      isPasswordRecovery: isPasswordRecovery ?? this.isPasswordRecovery,
       error: identical(error, _kKeepError) ? this.error : error as String?,
     );
   }
@@ -112,6 +119,11 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         if (!state.isLoading && !innerLoading) {
           ref.invalidateSelf();
         }
+      } else if (event.event == AuthChangeEvent.passwordRecovery) {
+        // User opened the app via a password-reset email link.
+        // Flag the state so the router redirects to /reset-password.
+        final current = state.value ?? const AuthState();
+        state = AsyncData(current.copyWith(isPasswordRecovery: true, error: null));
       } else if (event.event == AuthChangeEvent.signedOut) {
         state = const AsyncData(AuthState());
       }
@@ -528,6 +540,28 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
 
   Future<void> resendVerificationEmail(String email) async {
     await ref.read(authRepositoryProvider).resendVerificationEmail(email);
+  }
+
+  void clearPasswordRecovery() {
+    final current = state.value ?? const AuthState();
+    state = AsyncData(current.copyWith(isPasswordRecovery: false));
+  }
+
+  Future<void> sendPasswordReset(String email) async {
+    await ref.read(authRepositoryProvider).sendPasswordReset(email);
+  }
+
+  Future<void> updatePassword(String newPassword) async {
+    final prev = state.value ?? const AuthState();
+    state = AsyncData(prev.copyWith(isLoading: true, error: null));
+    try {
+      await ref.read(authRepositoryProvider).updatePassword(newPassword);
+      // Clear recovery flag and loading — user is done.
+      state = AsyncData(prev.copyWith(isLoading: false, isPasswordRecovery: false, error: null));
+    } catch (e, stack) {
+      FirebaseCrashlytics.instance.recordError(e, stack, reason: 'updatePassword');
+      state = AsyncData(prev.copyWith(isLoading: false, error: userFriendlyError(e)));
+    }
   }
 
   Future<void> deleteAccount() async {

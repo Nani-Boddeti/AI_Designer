@@ -337,8 +337,7 @@ class _HouseholdSetupScreenState extends ConsumerState<HouseholdSetupScreen>
               contentPadding: EdgeInsets.zero,
               title: const Text('Scale suggestions with family size'),
               subtitle: const Text(
-                'ON: limits and price grow as members join.\n'
-                'OFF: fixed limits and price for all plan sizes.',
+                'When on, outfit limits and pricing grow as more members join.',
               ),
               value: _dynamicPricing,
               onChanged: (v) => setState(() => _dynamicPricing = v),

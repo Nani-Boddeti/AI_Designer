@@ -6,6 +6,7 @@ import '../presentation/providers/auth_provider.dart';
 import '../presentation/providers/onboarding_provider.dart';
 import '../presentation/providers/version_check_provider.dart';
 import '../presentation/screens/auth/auth_screen.dart';
+import '../presentation/screens/auth/reset_password_screen.dart';
 import '../presentation/screens/force_update/force_update_screen.dart';
 import '../presentation/screens/auth/household_picker_screen.dart';
 import '../presentation/screens/auth/household_setup_screen.dart';
@@ -57,6 +58,7 @@ class AppRoutes {
   static const String manualItemSelection = '/manual-item-selection';
   static const String forceUpdate = '/force-update';
   static const String householdPicker = '/household-picker';
+  static const String resetPassword = '/reset-password';
 
   // Helper to build concrete paths.
   static String wardrobePath(String profileId) => '/wardrobe/$profileId';
@@ -109,6 +111,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       final isOnAuth = loc == AppRoutes.auth;
       final isOnSetup = loc == AppRoutes.householdSetup;
       final isOnPicker = loc == AppRoutes.householdPicker;
+      final isOnReset = loc == AppRoutes.resetPassword;
+
+      // Password recovery deep link — redirect to reset screen regardless of
+      // auth state. Supabase signs the user in automatically with the recovery
+      // token, so authValue.isAuthenticated will be true at this point.
+      if (authValue?.isPasswordRecovery == true) {
+        return isOnReset ? null : AppRoutes.resetPassword;
+      }
 
       if (authValue == null || !authValue.isAuthenticated) {
         if (isOnAuth) return null;
@@ -154,6 +164,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.auth,
         builder: (_, _) => const AuthScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.resetPassword,
+        builder: (_, _) => const ResetPasswordScreen(),
       ),
       GoRoute(
         path: AppRoutes.householdSetup,

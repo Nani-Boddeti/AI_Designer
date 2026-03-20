@@ -30,6 +30,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
   bool _magicLinkSent = false;
   bool _signedUp = false;
   String _signedUpEmail = '';
+  bool _forgotPasswordSent = false;
 
   @override
   void initState() {
@@ -49,6 +50,26 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
   // ---------------------------------------------------------------------------
   // Actions
   // ---------------------------------------------------------------------------
+
+  Future<void> _sendForgotPassword() async {
+    final email = _emailCtrl.text.trim();
+    if (email.isEmpty || !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter your email above first.')),
+      );
+      return;
+    }
+    try {
+      await ref.read(authProvider.notifier).sendPasswordReset(email);
+      if (mounted) setState(() => _forgotPasswordSent = true);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(userFriendlyError(e))),
+        );
+      }
+    }
+  }
 
   Future<void> _signIn() async {
     if (!_signInFormKey.currentState!.validate()) return;
@@ -307,6 +328,41 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
                     )
                   : Text(isSignIn ? 'Sign In' : 'Create Account'),
             ),
+            if (isSignIn) ...[
+              const SizedBox(height: 4),
+              if (_forgotPasswordSent)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    children: [
+                      Icon(Icons.mark_email_read_outlined,
+                          size: 16,
+                          color: Theme.of(context).colorScheme.primary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Reset link sent! Check your inbox.',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: isLoading ? null : _sendForgotPassword,
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text('Forgot password?'),
+                  ),
+                ),
+            ],
             if (!isSignIn) ...[
               const SizedBox(height: 12),
               Text(
