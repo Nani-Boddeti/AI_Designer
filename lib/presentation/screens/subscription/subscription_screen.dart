@@ -113,9 +113,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          response.message?.isNotEmpty == true
-              ? response.message!
-              : 'Payment failed. Please try again.',
+          'Payment failed. Please try again.',
         ),
       ),
     );

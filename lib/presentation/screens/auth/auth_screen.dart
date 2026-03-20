@@ -87,7 +87,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
     if (!mounted) return;
     final authState = ref.read(authProvider);
     if (authState.hasError) {
-      _showError(authState.error.toString());
+      _showError(userFriendlyError(authState.error.toString()));
     } else {
       setState(() => _magicLinkSent = true);
     }
@@ -108,7 +108,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
       ));
       return;
     }
-    _showError(error);
+    _showError(userFriendlyError(error));
   }
 
   Future<void> _resendVerification(String email) async {

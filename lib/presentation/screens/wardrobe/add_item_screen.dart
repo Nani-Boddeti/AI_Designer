@@ -540,7 +540,7 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to save season tag: $e')),
+            SnackBar(content: Text(userFriendlyError(e))),
           );
         }
         return;

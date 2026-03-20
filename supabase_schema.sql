@@ -387,6 +387,69 @@ AS $$
 $$;
 
 -- ---------------------------------------------------------------------------
+-- create_household RPC
+-- Atomically creates household + profile + membership + user_preferences in
+-- one transaction. SECURITY DEFINER bypasses RLS internally (no recursion).
+-- PostgREST rolls back all steps on failure — no orphaned rows possible.
+-- Replaces the 4 sequential client-side inserts in auth_repository.dart.
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION create_household(
+  p_household_id    UUID,
+  p_name            TEXT,
+  p_invite_code     TEXT,
+  p_hemisphere      TEXT,
+  p_dynamic_pricing BOOLEAN,
+  p_profile_name    TEXT,
+  p_gender          TEXT,
+  p_skin_tone       TEXT DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_uid       UUID := auth.uid();
+  v_household JSONB;
+  v_profile   JSONB;
+BEGIN
+  IF v_uid IS NULL THEN
+    RAISE EXCEPTION 'not_authenticated';
+  END IF;
+
+  INSERT INTO households (id, name, invite_code, hemisphere, dynamic_pricing)
+  VALUES (p_household_id, p_name, p_invite_code, p_hemisphere, p_dynamic_pricing);
+
+  INSERT INTO profiles (
+    household_id, auth_user_id, name, age_group, gender,
+    skin_tone, style_persona, fit_preferences, is_admin
+  )
+  VALUES (
+    p_household_id, v_uid, p_profile_name, 'adult', p_gender,
+    p_skin_tone, '[]', '{}', true
+  );
+
+  INSERT INTO household_memberships (user_id, household_id, is_admin)
+  VALUES (v_uid, p_household_id, true);
+
+  INSERT INTO user_preferences (user_id, active_household_id)
+  VALUES (v_uid, p_household_id)
+  ON CONFLICT (user_id) DO UPDATE
+    SET active_household_id = EXCLUDED.active_household_id;
+
+  SELECT to_jsonb(h) INTO v_household FROM households h WHERE h.id = p_household_id;
+  SELECT to_jsonb(p) INTO v_profile   FROM profiles p
+    WHERE p.auth_user_id = v_uid AND p.household_id = p_household_id;
+
+  RETURN jsonb_build_object('household', v_household, 'profile', v_profile);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION create_household(UUID, TEXT, TEXT, TEXT, BOOLEAN, TEXT, TEXT, TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION create_household(UUID, TEXT, TEXT, TEXT, BOOLEAN, TEXT, TEXT, TEXT) TO authenticated;
+
+-- ---------------------------------------------------------------------------
 -- RLS Policies
 -- ---------------------------------------------------------------------------
 
@@ -505,29 +568,53 @@ CREATE POLICY "profiles_delete" ON profiles
 
 -- ── Household memberships ────────────────────────────────────────────────────
 
+-- SECURITY DEFINER helpers — bypass RLS when querying household_memberships
+-- from within policies ON household_memberships (avoids 42P17 recursion).
+-- Same pattern as get_profile_is_admin used for profiles_update.
+
+-- Returns true if the household already has any member rows.
+-- Used by memberships_insert to guard the first-member-only check.
+CREATE OR REPLACE FUNCTION household_has_members(p_household_id UUID)
+RETURNS BOOLEAN
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM household_memberships WHERE household_id = p_household_id
+  );
+$$;
+
+-- Returns household_ids where p_user_id is an admin.
+-- Used by memberships_select_admin without self-referencing the table.
+CREATE OR REPLACE FUNCTION get_admin_household_ids(p_user_id UUID)
+RETURNS SETOF UUID
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT household_id FROM household_memberships
+  WHERE user_id = p_user_id AND is_admin = true;
+$$;
+
 -- Members can see their own membership rows (for allHouseholds fetch).
 CREATE POLICY "memberships_select_own" ON household_memberships
   FOR SELECT USING (user_id = auth.uid());
 
 -- Admins can see all membership rows in their household (for member management).
+-- Non-recursive: get_admin_household_ids() is SECURITY DEFINER.
 CREATE POLICY "memberships_select_admin" ON household_memberships
   FOR SELECT USING (
-    household_id IN (
-      SELECT household_id FROM household_memberships
-      WHERE user_id = auth.uid() AND is_admin = true
-    )
+    household_id IN (SELECT get_admin_household_ids(auth.uid()))
   );
 
 -- Direct insert allowed only for the first membership row (createHousehold flow).
--- All subsequent joins must use join_household_with_invite() RPC which validates
--- the invite code before inserting — prevents UUID-only bypass of invite flow.
+-- All subsequent joins use join_household_with_invite() SECURITY DEFINER RPC.
+-- Non-recursive: household_has_members() is SECURITY DEFINER.
+-- Note: createHousehold now goes through create_household() RPC (SECURITY DEFINER)
+-- which bypasses this policy entirely — this guard protects any direct insert path.
 CREATE POLICY "memberships_insert" ON household_memberships
   FOR INSERT WITH CHECK (
     user_id = auth.uid()
-    AND NOT EXISTS (
-      SELECT 1 FROM household_memberships existing
-      WHERE existing.household_id = household_memberships.household_id
-    )
+    AND NOT household_has_members(household_memberships.household_id)
   );
 
 -- Direct membership delete is NOT allowed via RLS.

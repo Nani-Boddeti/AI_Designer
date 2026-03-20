@@ -26,7 +26,7 @@ class _HouseholdSetupScreenState extends ConsumerState<HouseholdSetupScreen>
   String _hemisphere = 'north';
   Gender _createGender = Gender.other;
   SkinTone? _createSkinTone;
-  bool _dynamicPricing = true;
+  bool _dynamicPricing = false;
 
   // Join household
   final _inviteCodeCtrl = TextEditingController();
@@ -335,9 +335,9 @@ class _HouseholdSetupScreenState extends ConsumerState<HouseholdSetupScreen>
             const SizedBox(height: 8),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('Scale with family size'),
+              title: const Text('Scale suggestions with family size'),
               subtitle: const Text(
-                'ON: suggestion limits and price grow as members join.\n'
+                'ON: limits and price grow as members join.\n'
                 'OFF: fixed limits and price for all plan sizes.',
               ),
               value: _dynamicPricing,

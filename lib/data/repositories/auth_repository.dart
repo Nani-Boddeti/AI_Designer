@@ -117,57 +117,24 @@ class AuthRepository {
     final householdId = const Uuid().v4();
     final inviteCode = _generateInviteCode();
 
-    // Step 1: Insert household WITHOUT .select() — the SELECT policy uses
-    // current_household_id() which looks up the user's profile. No profile
-    // exists yet, so chaining .select() would return 0 rows and throw an
-    // RLS error even though the INSERT itself succeeds.
-    await _client
-        .from(SupabaseTables.households)
-        .insert({
-          'id': householdId,
-          'name': householdName,
-          'hemisphere': hemisphere,
-          'invite_code': inviteCode,
-          'dynamic_pricing': dynamicPricing,
-        });
-
-    // Step 2: Insert profile WITHOUT .select() — same reason as household:
-    // current_household_id() can't see the row being inserted in the same
-    // statement, so RETURNING would return 0 rows and throw an RLS error.
-    await _client
-        .from(SupabaseTables.profiles)
-        .insert({
-          'household_id': householdId,
-          'auth_user_id': user.id,
-          'name': profileName,
-          'age_group': AgeGroup.adult.value,
-          'gender': gender,
-          'style_persona': <String>[],
-          'fit_preferences': <String, dynamic>{},
-          'is_admin': true,
-          if (skinTone != null) 'skin_tone': skinTone.value,
-        });
-
-    // Step 3: Insert membership row + persist active household in user_preferences.
-    // user_preferences drives current_household_id() so RLS works for all
-    // subsequent wardrobe / outfit queries.
-    await _client.from('household_memberships').insert({
-      'user_id': user.id,
-      'household_id': householdId,
-      'is_admin': true,
-    });
-    await _service.upsertActiveHousehold(user.id, householdId);
-
-    // Step 4: Both rows are now committed. current_household_id() works.
-    // Fetch household and profile in parallel.
-    final results = await Future.wait([
-      _client.from(SupabaseTables.households).select().eq('id', householdId).single(),
-      _client.from(SupabaseTables.profiles).select().eq('auth_user_id', user.id).eq('household_id', householdId).single(),
-    ]);
+    // Single atomic RPC: all 4 steps (household → profile → membership →
+    // user_preferences) run in one transaction on the server.
+    // SECURITY DEFINER bypasses RLS internally, so no recursion possible.
+    // PostgREST rolls back everything on failure — no orphaned rows.
+    final response = await _client.rpc('create_household', params: {
+      'p_household_id':    householdId,
+      'p_name':            householdName,
+      'p_invite_code':     inviteCode,
+      'p_hemisphere':      hemisphere,
+      'p_dynamic_pricing': dynamicPricing,
+      'p_profile_name':    profileName,
+      'p_gender':          gender,
+      if (skinTone != null) 'p_skin_tone': skinTone.value,
+    }) as Map<String, dynamic>;
 
     return (
-      household: Household.fromJson(results[0]),
-      profile: Profile.fromJson(results[1]),
+      household: Household.fromJson(response['household'] as Map<String, dynamic>),
+      profile:   Profile.fromJson(response['profile']   as Map<String, dynamic>),
     );
   }
 
