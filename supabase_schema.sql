@@ -1148,6 +1148,84 @@ LEFT JOIN households h ON h.id = pt.household_id
 LEFT JOIN profiles p   ON p.auth_user_id = pt.user_id;
 
 -- ---------------------------------------------------------------------------
+-- payment_events — webhook audit log (payment.failed, refund.processed)
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS payment_events (
+  id                    UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_type            TEXT        NOT NULL,
+  razorpay_order_id     TEXT,
+  razorpay_payment_id   TEXT,
+  razorpay_refund_id    TEXT,
+  household_id          UUID        REFERENCES households(id) ON DELETE SET NULL,
+  user_id               UUID        REFERENCES auth.users(id) ON DELETE SET NULL,
+  tier                  TEXT,
+  amount_paise          INTEGER,
+  error_code            TEXT,
+  error_description     TEXT,
+  raw_payload           JSONB,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS payment_events_payment_event_uniq
+  ON payment_events(razorpay_payment_id, event_type)
+  WHERE razorpay_payment_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS payment_events_refund_uniq
+  ON payment_events(razorpay_refund_id)
+  WHERE razorpay_refund_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_payment_events_household ON payment_events(household_id);
+CREATE INDEX IF NOT EXISTS idx_payment_events_created   ON payment_events(created_at DESC);
+
+ALTER TABLE payment_events ENABLE ROW LEVEL SECURITY;
+-- No user-facing RLS policies — service_role only.
+
+-- ---------------------------------------------------------------------------
+-- record_payment_event RPC
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION record_payment_event(
+  p_event_type            TEXT,
+  p_razorpay_order_id     TEXT        DEFAULT NULL,
+  p_razorpay_payment_id   TEXT        DEFAULT NULL,
+  p_razorpay_refund_id    TEXT        DEFAULT NULL,
+  p_household_id          UUID        DEFAULT NULL,
+  p_user_id               UUID        DEFAULT NULL,
+  p_tier                  TEXT        DEFAULT NULL,
+  p_amount_paise          INTEGER     DEFAULT NULL,
+  p_error_code            TEXT        DEFAULT NULL,
+  p_error_description     TEXT        DEFAULT NULL,
+  p_raw_payload           JSONB       DEFAULT NULL
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  INSERT INTO payment_events (
+    event_type, razorpay_order_id, razorpay_payment_id, razorpay_refund_id,
+    household_id, user_id, tier, amount_paise,
+    error_code, error_description, raw_payload
+  )
+  VALUES (
+    p_event_type, p_razorpay_order_id, p_razorpay_payment_id, p_razorpay_refund_id,
+    p_household_id, p_user_id, p_tier, p_amount_paise,
+    p_error_code, p_error_description, p_raw_payload
+  )
+  ON CONFLICT DO NOTHING;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION record_payment_event(
+  TEXT, TEXT, TEXT, TEXT, UUID, UUID, TEXT, INTEGER, TEXT, TEXT, JSONB
+) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION record_payment_event(
+  TEXT, TEXT, TEXT, TEXT, UUID, UUID, TEXT, INTEGER, TEXT, TEXT, JSONB
+) TO service_role;
+
+-- ---------------------------------------------------------------------------
 -- Migrations (idempotent — safe to re-run)
 -- ---------------------------------------------------------------------------
 
