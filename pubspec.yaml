@@ -2,7 +2,7 @@ name: ai_designer_assist
 description: "AI-powered family outfit coordination app"
 publish_to: 'none'
 
-version: 1.0.4+7
+version: 1.0.5+8
 
 environment:
   sdk: ^3.11.0
