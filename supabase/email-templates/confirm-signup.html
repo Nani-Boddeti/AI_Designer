@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Confirm your VibeVault account</title>
+</head>
+<body style="margin:0;padding:0;background-color:#FAF7F2;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#FAF7F2;">
+    <tr>
+      <td align="center" style="padding:40px 16px;">
+
+        <!-- Card -->
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:520px;background-color:#FFFFFF;border-radius:24px;overflow:hidden;box-shadow:0 4px 24px rgba(193,112,103,0.10);">
+
+          <!-- Header gradient -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#FFE8E4 0%,#FFF3E2 55%,#D8EBD7 100%);padding:40px 40px 32px;text-align:center;">
+
+              <!-- Logo wordmark -->
+              <div style="display:inline-block;margin-bottom:20px;">
+                <span style="font-size:28px;font-weight:800;letter-spacing:-0.5px;color:#2D2417;">Vibe</span><span style="font-size:28px;font-weight:800;letter-spacing:-0.5px;color:#C17067;">Vault</span>
+              </div>
+
+              <!-- Hero icon -->
+              <div style="width:72px;height:72px;background-color:#FFFFFF;border-radius:20px;margin:0 auto 20px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 12px rgba(193,112,103,0.15);">
+                <span style="font-size:36px;line-height:72px;display:block;text-align:center;">✉️</span>
+              </div>
+
+              <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#2D2417;letter-spacing:-0.3px;">Confirm your email</h1>
+              <p style="margin:0;font-size:15px;color:#7A6E65;line-height:1.5;">One tap and your wardrobe awaits.</p>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:36px 40px 28px;">
+              <p style="margin:0 0 20px;font-size:15px;color:#2D2417;line-height:1.6;">
+                Welcome to <strong>VibeVault</strong> — your family's AI-powered style companion. Coordinate outfits, build a shared wardrobe, and let AI suggest looks that feel right for every occasion and every person in your household.
+              </p>
+
+              <p style="margin:0 0 28px;font-size:15px;color:#2D2417;line-height:1.6;">
+                Tap the button below to verify your email and get started.
+              </p>
+
+              <!-- CTA button -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td align="center" style="padding-bottom:28px;">
+                    <a href="{{ .ConfirmationURL }}"
+                       style="display:inline-block;background-color:#C17067;color:#FFFFFF;text-decoration:none;font-size:16px;font-weight:700;padding:16px 40px;border-radius:14px;letter-spacing:0.2px;">
+                      Confirm my email
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Fallback link -->
+              <p style="margin:0 0 8px;font-size:13px;color:#7A6E65;line-height:1.5;">
+                Button not working? Copy and paste this link into your browser:
+              </p>
+              <p style="margin:0;font-size:12px;color:#C17067;word-break:break-all;line-height:1.5;">
+                {{ .ConfirmationURL }}
+              </p>
+            </td>
+          </tr>
+
+          <!-- Feature pills -->
+          <tr>
+            <td style="padding:0 40px 36px;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td width="33%" style="padding:0 4px 0 0;text-align:center;">
+                    <div style="background-color:#FFE8E4;border-radius:12px;padding:12px 8px;">
+                      <div style="font-size:20px;margin-bottom:4px;">👗</div>
+                      <div style="font-size:11px;color:#C17067;font-weight:600;">Smart Wardrobe</div>
+                    </div>
+                  </td>
+                  <td width="33%" style="padding:0 2px;text-align:center;">
+                    <div style="background-color:#FFF3E2;border-radius:12px;padding:12px 8px;">
+                      <div style="font-size:20px;margin-bottom:4px;">✨</div>
+                      <div style="font-size:11px;color:#D4956A;font-weight:600;">AI Styling</div>
+                    </div>
+                  </td>
+                  <td width="33%" style="padding:0 0 0 4px;text-align:center;">
+                    <div style="background-color:#D8EBD7;border-radius:12px;padding:12px 8px;">
+                      <div style="font-size:20px;margin-bottom:4px;">🏡</div>
+                      <div style="font-size:11px;color:#7B9E7A;font-weight:600;">Family Plans</div>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Divider + footer -->
+          <tr>
+            <td style="border-top:1px solid #EDE4D8;padding:24px 40px;text-align:center;">
+              <p style="margin:0 0 6px;font-size:12px;color:#7A6E65;line-height:1.5;">
+                This link expires in 24 hours. If you didn't create a VibeVault account, you can safely ignore this email.
+              </p>
+              <p style="margin:0;font-size:11px;color:#AA9E97;">© 2026 VibeVault. All rights reserved.</p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>

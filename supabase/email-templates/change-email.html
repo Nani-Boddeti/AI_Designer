@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Confirm your new email — VibeVault</title>
+</head>
+<body style="margin:0;padding:0;background-color:#FAF7F2;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#FAF7F2;">
+    <tr>
+      <td align="center" style="padding:40px 16px;">
+
+        <!-- Card -->
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:520px;background-color:#FFFFFF;border-radius:24px;overflow:hidden;box-shadow:0 4px 24px rgba(193,112,103,0.10);">
+
+          <!-- Header gradient -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#D8EBD7 0%,#FFF3E2 50%,#FFE8E4 100%);padding:40px 40px 32px;text-align:center;">
+
+              <!-- Logo wordmark -->
+              <div style="display:inline-block;margin-bottom:20px;">
+                <span style="font-size:28px;font-weight:800;letter-spacing:-0.5px;color:#2D2417;">Vibe</span><span style="font-size:28px;font-weight:800;letter-spacing:-0.5px;color:#C17067;">Vault</span>
+              </div>
+
+              <!-- Hero icon -->
+              <div style="width:72px;height:72px;background-color:#FFFFFF;border-radius:20px;margin:0 auto 20px;box-shadow:0 2px 12px rgba(212,149,106,0.15);">
+                <span style="font-size:36px;line-height:72px;display:block;text-align:center;">📬</span>
+              </div>
+
+              <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#2D2417;letter-spacing:-0.3px;">Confirm your new email</h1>
+              <p style="margin:0;font-size:15px;color:#7A6E65;line-height:1.5;">Almost done — just one tap to update your address.</p>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:36px 40px 28px;">
+
+              <!-- Change summary box -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-bottom:28px;">
+                <tr>
+                  <td style="background-color:#F5EFE8;border-radius:12px;padding:16px 20px;">
+                    <p style="margin:0 0 10px;font-size:12px;font-weight:700;color:#AA9E97;text-transform:uppercase;letter-spacing:0.8px;">Email change request</p>
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                      <tr>
+                        <td style="font-size:13px;color:#7A6E65;padding-bottom:6px;width:60px;">From</td>
+                        <td style="font-size:13px;color:#2D2417;font-weight:500;padding-bottom:6px;">{{ .Email }}</td>
+                      </tr>
+                      <tr>
+                        <td style="font-size:13px;color:#7A6E65;width:60px;">To</td>
+                        <td style="font-size:13px;color:#C17067;font-weight:600;">{{ .NewEmail }}</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:0 0 28px;font-size:15px;color:#2D2417;line-height:1.6;">
+                Confirm the new address to keep your <strong>VibeVault</strong> account secure and up to date. All your wardrobe data, family profiles, and outfit history stay exactly as they are.
+              </p>
+
+              <!-- CTA button -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td align="center" style="padding-bottom:28px;">
+                    <a href="{{ .ConfirmationURL }}"
+                       style="display:inline-block;background-color:#C17067;color:#FFFFFF;text-decoration:none;font-size:16px;font-weight:700;padding:16px 40px;border-radius:14px;letter-spacing:0.2px;">
+                      Confirm new email
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Fallback link -->
+              <p style="margin:0 0 8px;font-size:13px;color:#7A6E65;line-height:1.5;">
+                Button not working? Copy and paste this link into your browser:
+              </p>
+              <p style="margin:0;font-size:12px;color:#C17067;word-break:break-all;line-height:1.5;">
+                {{ .ConfirmationURL }}
+              </p>
+            </td>
+          </tr>
+
+          <!-- Security notice -->
+          <tr>
+            <td style="padding:0 40px 36px;">
+              <div style="background-color:#D8EBD7;border-radius:12px;padding:16px 20px;">
+                <p style="margin:0;font-size:13px;color:#5A7A59;line-height:1.6;">
+                  <strong style="color:#2D2417;">Didn't make this change?</strong><br/>
+                  Ignore this email and your current email address will remain unchanged. We recommend signing in and reviewing your account settings if you believe this was unauthorised.
+                </p>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Divider + footer -->
+          <tr>
+            <td style="border-top:1px solid #EDE4D8;padding:24px 40px;text-align:center;">
+              <p style="margin:0 0 6px;font-size:12px;color:#7A6E65;line-height:1.5;">
+                This confirmation link expires in 24 hours and can only be used once.
+              </p>
+              <p style="margin:0;font-size:11px;color:#AA9E97;">© 2026 VibeVault. All rights reserved.</p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>
